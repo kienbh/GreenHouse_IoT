@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+.npm-cache/
+.pio/
+.vscode/
+.env
+# Thông tin thật / dữ liệu chạy
+firmware/src/secrets.h
+mqtt_broker/passwd
+mqtt_broker/data/
+mqtt_broker/log/
+app/data/
+# Model gốc Meshy 81 MB, repo chỉ giữ bản nén app/public/models/nhakinh.glb
+assess/

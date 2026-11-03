@@ -1,0 +1,15 @@
+{
+  "name": "nhakinh-app",
+  "version": "1.0.0",
+  "description": "App local cho nhà kính: nhận dữ liệu ESP32 qua MQTT, ghi CSV, giao diện web điều khiển",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "sim": "node --env-file=.env tools/sim_esp32.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.1",
+    "three": "^0.170.0"
+  }
+}
