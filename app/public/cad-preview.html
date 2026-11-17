@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mô hình CAD · xem thử</title>
+<style>:root{color-scheme:light}html,body{margin:0;height:100%;background:#eef3f0;font:14px system-ui}#v{position:fixed;inset:0}#info{position:fixed;left:12px;top:12px;background:#fffc;padding:10px 12px;border-radius:8px;max-width:420px}</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+</head><body><div id="v"></div><div id="info">Đang tải nhakinh-cad.glb (chuyển từ smart_farm_lap_ghep.STEP)…</div>
+<script type="module">
+// Bản xem thử mô hình CAD: kiểm tra hình học, màu và tìm các bộ phận theo TÊN chi tiết trong STEP.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const el = document.getElementById('v');
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight); el.append(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#eef3f0');
+scene.add(new THREE.HemisphereLight('#ffffff', '#8a9a90', 2.2)); const sun = new THREE.DirectionalLight('#ffffff', 2); sun.position.set(2, 3, 2); scene.add(sun);
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.001, 100); const ctl = new OrbitControls(cam, renderer.domElement);
+const PARTS = { 'Quạt thông gió': /Quat_thong_gio/, 'Máy bơm': /may_bom/, 'Bình nước': /Binh_nuoc/, 'Máy sưởi': /may_suoi|heater/i, 'ESP32': /ESP32/i, 'DHT11': /DHT11/, 'LED 5 mm': /LED_D50mm/, 'Thanh LED': /thanh_led/, 'Buzzer': /Buzzer/, 'OLED': /oled/i, 'Cảm biến mưa': /cam_bien_mua/, 'Arduino Uno': /arduinoUno/i };
+// Tường/mái/vách mica: STEP không lưu độ trong suốt, đặt lại để nhìn thấy thiết bị bên trong
+const GLASS = /tuong|mai_nha|mái|vach_ngan|mica|n_p|^n\?p/i;
+const g = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('/models/nhakinh-cad.glb');
+const root = g.scene; scene.add(root);
+root.traverse((o) => {
+  if (!o.isMesh) return;
+  let n = o, glass = false; while (n) { if (GLASS.test(n.name)) { glass = true; break; } n = n.parent; }
+  if (glass) { o.material = o.material.clone(); Object.assign(o.material, { transparent: true, opacity: 0.18, depthWrite: false, color: new THREE.Color('#cfe8ff') }); }
+});
+const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+cam.position.copy(c).add(new THREE.Vector3(size.x * 1.1, size.y * 0.9, size.z * 1.6)); ctl.target.copy(c); ctl.update();
+const found = {}; root.traverse((o) => { for (const [k, re] of Object.entries(PARTS)) if (re.test(o.name)) (found[k] ||= new Set()).add(o.name); });
+let tris = 0; root.traverse((o) => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+document.getElementById('info').innerHTML = `<b>Mô hình CAD (bản thử)</b><br>Kích thước ${(size.x * 1000).toFixed(0)} × ${(size.y * 1000).toFixed(0)} × ${(size.z * 1000).toFixed(0)} mm · ${Math.round(tris / 1000)}k tam giác<br>` +
+  Object.keys(PARTS).map((k) => `${found[k] ? '✔' : '✘'} ${k}${found[k] ? ' – ' + [...found[k]][0] : ''}`).join('<br>');
+window.__cad = { found: Object.fromEntries(Object.entries(found).map(([k, v]) => [k, [...v]])), size: size.toArray(), tris };
+(function loop() { renderer.render(scene, cam); requestAnimationFrame(loop); })();
+</script></body></html>

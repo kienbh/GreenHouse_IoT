@@ -1,0 +1,18 @@
+Khoi phuc vao /var/folders/vs/g52wmkns1x74nrgvs_h5lc8h0000gn/T/nhakinh-restore-qDpAYG/mqtt.sqlite; integrity_check = ok; sha256 khop
+Doi chieu khoang 2026-11-17T07:07:58.620Z .. 2026-11-17T08:07:58.620Z:
+┌─────────┬──────────────────────────────────┬─────┬───────────┬───────────┬──────────┬──────┐
+│ (index) │ topic                            │ goc │ khoi_phuc │ bytes_goc │ bytes_kp │ khop │
+├─────────┼──────────────────────────────────┼─────┼───────────┼───────────┼──────────┼──────┤
+│ 0       │ 'vju/nhakinh/esp32-01/ack'       │ 35  │ 35        │ 5362      │ 5362     │ 'co' │
+│ 1       │ 'vju/nhakinh/esp32-01/cmd'       │ 35  │ 35        │ 2151      │ 2151     │ 'co' │
+│ 2       │ 'vju/nhakinh/esp32-01/event'     │ 27  │ 27        │ 2205      │ 2205     │ 'co' │
+│ 3       │ 'vju/nhakinh/esp32-01/status'    │ 9   │ 9         │ 57        │ 57       │ 'co' │
+│ 4       │ 'vju/nhakinh/esp32-01/telemetry' │ 753 │ 753       │ 226998    │ 226998   │ 'co' │
+│ 5       │ 'vju/nhakinh/ghost-01/cmd'       │ 3   │ 3         │ 168       │ 168      │ 'co' │
+│ 6       │ 'vju/nhakinh/sim-01/ack'         │ 55  │ 55        │ 8835      │ 8835     │ 'co' │
+│ 7       │ 'vju/nhakinh/sim-01/cmd'         │ 55  │ 55        │ 3207      │ 3207     │ 'co' │
+│ 8       │ 'vju/nhakinh/sim-01/event'       │ 37  │ 37        │ 2741      │ 2741     │ 'co' │
+│ 9       │ 'vju/nhakinh/sim-01/status'      │ 5   │ 5         │ 31        │ 31       │ 'co' │
+│ 10      │ 'vju/nhakinh/sim-01/telemetry'   │ 714 │ 714       │ 217105    │ 217105   │ 'co' │
+└─────────┴──────────────────────────────────┴─────┴───────────┴───────────┴──────────┴──────┘
+KET QUA: ban khoi phuc khop ban goc tren cung khoang du lieu

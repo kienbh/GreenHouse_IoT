@@ -2,8 +2,14 @@
 // Buzzer phát nhạc, LED R/G, dải LED đơn sắc, máy bơm, quạt thông gió, nhiệt ẩm từ Uno qua I2C
 // Bài 3 (/ctrl): máy bơm PWM có máy trạng thái DỪNG/CHẠY/LỖI, ngắt ngoài, timer phần cứng
 // Bài 4: MQTT client gửi telemetry/sự kiện lên broker trên PC và nhận lệnh qua topic cmd
+// Bài 6: lệnh có cmd_id, gửi xác nhận (ack) sau khi áp dụng đầu ra, lệnh trùng không chạy lại
+// Bài 7: khóa an toàn tại node; lệnh của luật tự động (src=auto) có hạn (lease), node tự tắt khi lỗi/hết hạn
+// Bài 8: MQTT qua TLS (8883), xác minh máy chủ bằng CA của nhóm, giờ lấy từ NTP
+// Bài 9: mã bản ghi seq, bộ đệm hữu hạn khi mất kết nối và gửi bù, lệnh giả lập mất mạng
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <time.h>
 #include <WebServer.h>
 #include <Wire.h>
 #include <ESPmDNS.h>
@@ -14,10 +20,12 @@
 #include <ArduinoJson.h>
 #include <vector>
 #include "config.h"
+#include "lcd.h"
 #include "melodies.h"
 #include "webpage.h"
 #include "datapage.h"
 #include "ctrlpage.h"
+#include "ca_cert.h"
 
 #define CH_BUZZER 0   // kênh LEDC cho buzzer
 
@@ -43,6 +51,16 @@ bool ledR = false, ledG = false;
 int ledArray = 0;              // dải LED: 0 tắt, 1 bật, 2 nháy
 bool autoMode = false;
 float tempThreshold = 30.0;
+
+// Bài 6-7: kết quả xử lý lệnh MQTT và khóa an toàn
+char lastRej[96] = "";         // lý do từ chối của lệnh đang xử lý ("" = đã áp dụng)
+bool safeLock = false;         // khóa an toàn: dừng bơm, tắt tải do luật bật, từ chối lệnh tự động
+bool fanAuto = false;          // LED xanh (giả lập quạt thông gió) đang do luật tự động bật
+unsigned long fanLeaseUntil = 0;
+float testTemp = NAN;          // Bài 7: nhiệt độ thử do chương trình đưa vào (NAN = dùng cảm biến thật)
+void rejectCmd(const char *fmt, ...) {
+  va_list ap; va_start(ap, fmt); vsnprintf(lastRej, sizeof(lastRej), fmt, ap); va_end(ap);
+}
 
 // ===== Trình phát nhạc không chặn (non-blocking) =====
 const Note *song = nullptr;
@@ -130,8 +148,14 @@ void updateSensor() {
   last = millis();
   int16_t t, h;
   sensCode = readUno(t, h);
+  if (!isnan(testTemp) && !simFault) {   // dữ liệu thử Bài 7: thay nhiệt độ, độ ẩm vẫn đọc thật nếu được
+    t = (int16_t)lroundf(testTemp * 10);
+    if (sensCode != E_OK) h = 0x7FFF;
+    sensCode = E_OK;
+  }
   bool ok = sensCode == E_OK;
-  if (ok) { temperature = t / 10.0; humidity = h / 10.0; }
+  if (ok && h == 0x7FFF) { temperature = t / 10.0; humidity = NAN; }
+  else if (ok) { temperature = t / 10.0; humidity = h / 10.0; }
   fails = ok ? 0 : fails + 1;
   if (fails >= 5) temperature = humidity = NAN;   // mất dữ liệu ~10s thì web hiện "--"
   if (!ok) return;   // lỗi đã được logger ghi vào nhật ký
@@ -440,6 +464,7 @@ void setState(int s, const char *fmt, ...) {
 void reject(const char *fmt, ...) {
   char why[80];
   va_list ap; va_start(ap, fmt); vsnprintf(why, sizeof(why), fmt, ap); va_end(ap);
+  strlcpy(lastRej, why, sizeof(lastRej));
   snprintf(stMsg, sizeof(stMsg), "Giu %s, tu choi: %s", ST_NAME[pst], why);
   logEvent('W', "B3 %s", stMsg);
 }
@@ -475,7 +500,8 @@ void updateState() {
     if (pst == ST_RUN) setState(ST_STOP, "lenh dung");
   } else if (cmdReq == 1) {
     long coolLeft = (long)(coolUntil - now);
-    if (pst == ST_FAULT) reject("dang LOI");
+    if (safeLock) reject("dang khoa an toan");
+    else if (pst == ST_FAULT) reject("dang LOI");
     else if (pst == ST_RUN) reject("dang CHAY, khong gia han gio");
     else if (coolLeft > 0) reject("dang nghi, con %lds", (coolLeft + 999) / 1000);
     else if (!sensOk) reject("%s", sensTxt);
@@ -779,7 +805,9 @@ String stateJson() {
   return s;
 }
 
-const char *SET_KEYS[] = {"auto", "th", "ledR", "ledG", "ledArray", "pump", "play", "stop"};
+// Khóa của /api/set và các khóa mới ở Bài 6-9 (ctrlFrom bỏ qua, không coi là lệnh sai)
+const char *SET_KEYS[] = {"auto", "th", "ledR", "ledG", "ledArray", "pump", "play", "stop",
+                          "cmd_id", "src", "lease", "lock", "period", "testT", "testFault", "outage", "mode"};
 bool isSetKey(const String &k) {
   for (const char *s : SET_KEYS) if (k == s) return true;
   return false;
@@ -792,6 +820,8 @@ void setFrom(CmdArgs &a) {
   if (!autoMode) {
     if (a.has("ledR")) ledR = a.get("ledR").toInt();
     if (a.has("ledG")) ledG = a.get("ledG").toInt();
+  } else if (a.has("ledR") || a.has("ledG")) {
+    rejectCmd("che do tu dong tai node dang quan ly LED R/G");
   }
   if (a.has("ledArray")) ledArray = constrain(a.get("ledArray").toInt(), 0, 2);
   if (a.has("pump")) cmdReq = a.get("pump").toInt() ? 1 : 2;   // qua máy trạng thái
@@ -807,18 +837,48 @@ void handleSet() {
   server.send(200, "application/json", stateJson());
 }
 
-// ===== Bài 4: MQTT =====
+// ===== Bài 4 + 6-9: MQTT =====
 // ESP32 là client, broker Mosquitto chạy trên PC. Các topic (T = MQTT_BASE + MQTT_DEVICE):
-//  T/status    "online" / "offline" (retained; "offline" do broker tự gửi nhờ Last Will khi ESP32 mất kết nối)
-//  T/telemetry JSON nhiệt ẩm + trạng thái, mỗi TELE_MS và ngay sau khi nhận lệnh
+//  T/status    "online" / "offline" (retained; "offline" do broker tự gửi nhờ Last Will khi ESP32 mất kết nối bất thường)
+//  T/telemetry JSON nhiệt ẩm + trạng thái, mỗi telePeriod; có seq (mã bản ghi) và boot (mã lần khởi động)
+//              bản ghi gửi bù sau mất mạng có "replay":1 và chỉ gồm số đo
 //  T/event     JSON từng dòng nhật ký sự kiện (lỗi cảm biến, FSM máy bơm...)
-//  T/cmd       ESP32 nhận lệnh JSON, khóa giống /api/set và /api/ctrl, ví dụ {"ledR":1} {"pump":1} {"cmd":"start","duty":60}
+//  T/cmd       ESP32 nhận lệnh JSON, khóa giống /api/set và /api/ctrl, thêm cmd_id/src/lease (Bài 6-7)
+//  T/ack       xác nhận lệnh: {"cmd_id":..,"status":"applied|rejected|duplicate","reason":..} (Bài 6)
 // Máy bơm vẫn qua máy trạng thái Bài 3: mất mạng giữa chừng thì hết runLimit giây bơm vẫn tự dừng.
-WiFiClient net;
+WiFiClientSecure net;          // Bài 8: TLS, xác minh chứng chỉ máy chủ bằng CA của nhóm (ca_cert.h)
 PubSubClient mqtt(net);
 const String TOPIC = String(MQTT_BASE) + MQTT_DEVICE;
 bool teleNow = false;          // gửi telemetry ngay ở vòng loop kế tiếp
 uint32_t mqttRx = 0, mqttTx = 0;
+uint32_t telePeriod = TELE_MS; // Bài 9: đổi được bằng lệnh {"period":2} (giây) để thử bộ đệm
+uint32_t seqNo = 0;            // mã bản ghi, tăng mỗi chu kỳ đo kể cả khi mất mạng; cặp (boot, seq) là duy nhất
+
+// ----- Bài 9: bộ đệm vòng hữu hạn cho bản ghi chưa gửi được. Đầy thì BỎ BẢN GHI CŨ NHẤT và đếm số bỏ -----
+struct BufRec { uint32_t seq, ms; int16_t t, h; uint8_t code; };
+BufRec ring[BUF_N];
+int ringHead = 0, ringLen = 0;
+uint32_t bufDropped = 0, bufReplayed = 0;
+void bufPush(const BufRec &r) {
+  if (ringLen == BUF_N) { ringHead = (ringHead + 1) % BUF_N; ringLen--; bufDropped++; }
+  ring[(ringHead + ringLen) % BUF_N] = r;
+  ringLen++;
+}
+
+// ----- Bài 9: giả lập mất mạng do lệnh {"outage":giây,"mode":"wifi|clean"} -----
+// wifi : ngắt WiFi phòng đột ngột, không gửi DISCONNECT -> broker chỉ phát hiện sau keepalive và phát LWT
+// clean: tự gửi "offline" rồi DISCONNECT có chủ đích -> broker KHÔNG phát LWT
+unsigned long outageUntil = 0;
+bool outageWifi = false;
+
+// ----- Bài 6: nhớ cmd_id gần đây để lệnh gửi lại không chạy lại (không khởi động lại thời gian chạy bơm) -----
+struct SeenCmd { char id[41]; char st[10]; };
+SeenCmd seen[DEDUP_N];
+int seenNext = 0;
+const char *seenStatus(const char *id) {
+  for (auto &c : seen) if (c.id[0] && !strcmp(c.id, id)) return c.st;
+  return nullptr;
+}
 
 struct JsonArgs : CmdArgs {
   std::vector<String> k, v;
@@ -827,19 +887,30 @@ struct JsonArgs : CmdArgs {
   String val(int i) override { return v[i]; }
 };
 
-String telemetryJson() {
-  char buf[512];
+String jsonNum(float v, int dec) { return isnan(v) ? String("null") : String(v, dec); }
+
+String telemetryJson(uint32_t seq) {
+  char buf[760];
   unsigned long now = millis();
   long coolLeft = (long)(coolUntil - now);
+  time_t ts = time(nullptr);
+  long leaseLeft = fanAuto && ledG ? (long)(fanLeaseUntil - now) / 1000 : 0;
   snprintf(buf, sizeof(buf),
-    "{\"t\":%s,\"h\":%s,\"code\":%d,\"ledR\":%d,\"ledG\":%d,\"ledArray\":%d,\"auto\":%d,\"th\":%.1f,"
+    "{\"dev\":\"%s\",\"boot\":%u,\"seq\":%lu,\"up_ms\":%lu,\"ts\":%s,\"valid\":%s,"
+    "\"t\":%s,\"h\":%s,\"code\":%d,\"src\":\"%s\",\"ledR\":%d,\"ledG\":%d,\"ledArray\":%d,\"auto\":%d,\"th\":%.1f,"
     "\"song\":%d,\"pump\":{\"st\":\"%s\",\"duty\":%d,\"out\":%d,\"lim\":%lu,\"cd\":%lu,\"el\":%lu,"
-    "\"cool\":%ld,\"msg\":\"%s\"},\"rssi\":%d,\"up\":%lu,\"boot\":%u,\"rx\":%lu}",
-    isnan(temperature) ? "null" : String(temperature, 1).c_str(),
-    isnan(humidity) ? "null" : String(humidity, 0).c_str(),
-    sensCode, ledR, ledG, ledArray, autoMode, tempThreshold, songId,
+    "\"cool\":%ld,\"msg\":\"%s\"},\"lock\":%d,\"fan\":{\"by\":\"%s\",\"lease\":%ld},"
+    "\"buf\":{\"n\":%d,\"max\":%d,\"drop\":%lu,\"replay\":%lu},\"period\":%lu,"
+    "\"rssi\":%d,\"heap\":%lu,\"up\":%lu,\"rx\":%lu}",
+    MQTT_DEVICE, bootNo, seq, now, ts > 1700000000 ? (String((uint32_t)ts) + "000").c_str() : "null",
+    sensCode == E_OK && !isnan(temperature) ? "true" : "false",
+    jsonNum(temperature, 1).c_str(), jsonNum(humidity, 0).c_str(), sensCode,
+    !isnan(testTemp) ? "test" : simFault ? "sim_fault" : "sensor",
+    ledR, ledG, ledArray, autoMode, tempThreshold, songId,
     ST_NAME[pst], duty, outDuty, runLimit, cooldown, pst == ST_RUN ? (now - stSince) / 1000 : 0UL,
-    coolLeft > 0 ? (coolLeft + 999) / 1000 : 0L, stMsg, WiFi.RSSI(), now / 1000, bootNo, mqttRx);
+    coolLeft > 0 ? (coolLeft + 999) / 1000 : 0L, stMsg, safeLock, fanAuto ? "auto" : "manual",
+    leaseLeft > 0 ? leaseLeft : 0L, ringLen, BUF_N, bufDropped, bufReplayed, telePeriod / 1000,
+    WiFi.RSSI(), (unsigned long)ESP.getFreeHeap(), now / 1000, mqttRx);
   return buf;
 }
 
@@ -850,10 +921,69 @@ void mqttEvent(char lv, const char *msg) {
   mqtt.publish((TOPIC + "/event").c_str(), buf);
 }
 
+void sendAck(const char *id, const char *st, const char *reason) {
+  if (!id[0]) return;
+  char buf[260];
+  snprintf(buf, sizeof(buf),
+    "{\"cmd_id\":\"%s\",\"status\":\"%s\",\"reason\":\"%s\",\"boot\":%u,\"up_ms\":%lu,"
+    "\"state\":{\"ledR\":%d,\"ledG\":%d,\"ledArray\":%d,\"pump\":\"%s\",\"lock\":%d}}",
+    id, st, reason, bootNo, millis(), ledR, ledG, ledArray, ST_NAME[pst], safeLock);
+  mqtt.publish((TOPIC + "/ack").c_str(), buf);
+}
+
+// Bài 7: node giữ quyền dừng. Tải do luật bật bị tắt khi lỗi cảm biến, máy bơm LỖI, khóa an toàn hoặc hết hạn lệnh
+void updateFanSafety() {
+  if (!fanAuto || !ledG) return;
+  const char *why = nullptr;
+  if (safeLock) why = "khoa an toan";
+  else if (sensCode != E_OK) why = ERR_TXT[sensCode];
+  else if (pst == ST_FAULT) why = "may bom dang LOI";
+  else if ((long)(millis() - fanLeaseUntil) >= 0) why = "het han lenh tu dong (mat lien lac voi dich vu?)";
+  if (!why) return;
+  ledG = false; fanAuto = false;
+  applyOutputs();
+  logEvent('W', "B7 Node tat LED xanh (quat): %s", why);
+  teleNow = true;
+}
+
+// Các khóa mới của Bài 7-9. Giá trị sai thì ghi lý do vào lastRej (ack "rejected")
+void extFrom(CmdArgs &a, bool isAuto) {
+  if (a.has("lock")) {
+    safeLock = a.get("lock").toInt();
+    prefs.begin("ctrl", false); prefs.putBool("lock", safeLock); prefs.end();
+    if (safeLock) { cmdReq = 2; updateFanSafety(); }
+    logEvent(safeLock ? 'W' : 'I', "B7 %s khoa an toan", safeLock ? "Bat" : "Mo");
+  }
+  long x;
+  if (a.has("period")) {
+    if (parseNum(a.get("period"), 1, 60, x)) telePeriod = x * 1000;
+    else rejectCmd("period phai 1-60 s");
+  }
+  if (a.has("testT")) {
+    String v = a.get("testT");
+    if (v == "null" || v == "") testTemp = NAN; else testTemp = v.toFloat();
+    logEvent('W', "B7 Du lieu thu: %s", isnan(testTemp) ? "tat, dung cam bien that" : ("t=" + v + " C").c_str());
+  }
+  if (a.has("testFault")) simFault = a.get("testFault").toInt();
+  if (a.has("ledG") && !lastRej[0] && !autoMode) {
+    fanAuto = isAuto && ledG;
+    long lease = FAN_LEASE_S;
+    if (isAuto && a.has("lease") && !parseNum(a.get("lease"), 10, 600, lease)) lease = FAN_LEASE_S;
+    if (fanAuto) fanLeaseUntil = millis() + lease * 1000UL;
+  }
+  if (a.has("outage")) {
+    if (!parseNum(a.get("outage"), 5, 600, x)) { rejectCmd("outage phai 5-600 s"); return; }
+    outageWifi = a.get("mode") != "clean";
+    outageUntil = millis() + x * 1000UL;
+  }
+}
+
 void onMqtt(char *topic, byte *payload, unsigned int len) {
   mqttRx++;
   JsonDocument doc;
   JsonArgs a;
+  char id[41] = "";
+  bool isAuto = false;
   if (deserializeJson(doc, payload, len) || !doc.is<JsonObject>()) {
     a.k.push_back("json");             // không phải JSON object -> lệnh sai định dạng (Bài 3)
     char raw[21] = "";                 // payload không có '\0' ở cuối, chép tối đa 20 ký tự
@@ -866,48 +996,143 @@ void onMqtt(char *topic, byte *payload, unsigned int len) {
       else serializeJson(p.value(), v);  // số, true/false giữ nguyên dạng chữ: 60, true
       if (v == "true") v = "1";
       if (v == "false") v = "0";
+      if (!strcmp(p.key().c_str(), "cmd_id")) {   // chỉ giữ ký tự an toàn để ghép vào JSON ack
+        int n = 0;
+        for (char ch : v) if (n < 40 && (isalnum(ch) || ch == '-' || ch == '_' || ch == '.')) id[n++] = ch;
+        id[n] = 0;
+        continue;
+      }
+      if (!strcmp(p.key().c_str(), "mode")) { a.k.push_back("mode"); a.v.push_back(v); continue; }
+      if (!strcmp(p.key().c_str(), "src")) { isAuto = v == "auto"; continue; }
       a.k.push_back(p.key().c_str());
       a.v.push_back(v);
     }
   }
   Serial.printf("MQTT <- %.*s\n", (int)len, (const char *)payload);
-  setFrom(a);
-  ctrlFrom(a, true);
+  if (id[0]) {
+    const char *prev = seenStatus(id);
+    if (prev) {                        // gửi lại cùng cmd_id: không thực hiện lại, chỉ báo kết quả lần đầu
+      logEvent('W', "B6 Lenh trung %s (lan dau: %s), khong thuc hien lai", id, prev);
+      sendAck(id, "duplicate", prev);
+      return;
+    }
+  }
+  lastRej[0] = 0;
+  // Bài 7: lệnh tự động bị chặn tại node khi đang khóa/lỗi, dù dịch vụ đã cho phép
+  if (isAuto && safeLock) rejectCmd("dang khoa an toan");
+  else if (isAuto && sensCode != E_OK) rejectCmd("loi cam bien: %s", ERR_TXT[sensCode]);
+  else if (isAuto && pst == ST_FAULT) rejectCmd("may bom dang LOI");
+  else if (isAuto && autoMode) rejectCmd("xung dot: che do tu dong tai node dang bat");
+  else {
+    setFrom(a);
+    if (!lastRej[0]) extFrom(a, isAuto);
+    ctrlFrom(a, true);
+  }
+  const char *st = lastRej[0] ? "rejected" : "applied";
+  if (id[0]) {
+    strlcpy(seen[seenNext].id, id, sizeof(seen[0].id));
+    strlcpy(seen[seenNext].st, st, sizeof(seen[0].st));
+    seenNext = (seenNext + 1) % DEDUP_N;
+    for (char *c = lastRej; *c; c++) if (*c == '"' || *c == '\\') *c = '\'';
+    sendAck(id, st, lastRej);          // gửi SAU khi setFrom/ctrlFrom đã ghi đầu ra (applyOutputs/pumpWrite)
+  }
   teleNow = true;
+}
+
+void mqttConnect() {
+  String id = String("nhakinh-") + MQTT_DEVICE;
+  // Last Will: nếu ESP32 rớt mạng bất thường, broker tự đăng "offline" lên topic status
+  unsigned long t0 = millis();
+  if (mqtt.connect(id.c_str(), MQTT_USER, MQTT_PASS, (TOPIC + "/status").c_str(), 1, true, "offline")) {
+    mqtt.publish((TOPIC + "/status").c_str(), "online", true);
+    mqtt.subscribe((TOPIC + "/cmd").c_str(), 1);
+    logEvent('I', "MQTT TLS da ket noi %s:%d sau %lums, topic %s, dem %d ban ghi cho gui bu",
+             MQTT_HOST, MQTT_PORT, millis() - t0, TOPIC.c_str(), ringLen);
+    teleNow = true;
+  } else {
+    char err[100] = "";
+    net.lastError(err, sizeof(err));
+    Serial.printf("MQTT loi ket noi (state %d, TLS: %s) sau %lums, thu lai sau %ds\n",
+                  mqtt.state(), err[0] ? err : "-", millis() - t0, MQTT_RETRY_MS / 1000);
+  }
 }
 
 void updateMqtt() {
   static unsigned long lastTry = 0, lastTele = 0;
-  if (strlen(STA_SSID) == 0 || WiFi.status() != WL_CONNECTED) return;
+  static bool inOutage = false;
+  if (strlen(STA_SSID) == 0) return;
+  unsigned long now = millis();
+
+  // ----- giả lập mất mạng (Bài 9) -----
+  if (outageUntil && !inOutage) {
+    inOutage = true;
+    logEvent('W', "B9 Gia lap mat mang %lus (%s)", (outageUntil - now) / 1000, outageWifi ? "ngat WiFi dot ngot" : "ngat MQTT co chu dich");
+    if (outageWifi) { net.stop(); WiFi.disconnect(false, false); }   // không gửi DISCONNECT
+    else { mqtt.publish((TOPIC + "/status").c_str(), "offline", true); mqtt.disconnect(); }
+  }
+  if (inOutage && (long)(now - outageUntil) >= 0) {
+    inOutage = false; outageUntil = 0;
+    if (outageWifi) WiFi.begin(STA_SSID, STA_PASS);
+    lastTry = 0;
+    logEvent('I', "B9 Het gia lap mat mang, dang ket noi lai");
+  }
+
+  // ----- chu kỳ đo: luôn sinh bản ghi có seq, không gửi được thì vào bộ đệm -----
+  bool due = teleNow || now - lastTele >= telePeriod;
+  bool up = !inOutage && WiFi.status() == WL_CONNECTED && mqtt.connected();
+  if (due) {                     // mỗi bản ghi (định kỳ hoặc ngay sau lệnh) có seq mới
+    teleNow = false;
+    lastTele = now;
+    uint32_t s = ++seqNo;
+    bool sent = up && mqtt.publish((TOPIC + "/telemetry").c_str(), telemetryJson(s).c_str());
+    if (sent) mqttTx++;
+    else bufPush({s, now, (int16_t)(isnan(temperature) ? 0x7FFF : lroundf(temperature * 10)),
+                  (int16_t)(isnan(humidity) ? 0x7FFF : lroundf(humidity * 10)), (uint8_t)sensCode});
+  }
+  if (inOutage || WiFi.status() != WL_CONNECTED) return;
   if (!mqtt.connected()) {
-    if (lastTry && millis() - lastTry < MQTT_RETRY_MS) return;
-    lastTry = millis();
-    String id = String("nhakinh-") + MQTT_DEVICE;
-    // Last Will: nếu ESP32 rớt mạng, broker tự đăng "offline" lên topic status
-    if (mqtt.connect(id.c_str(), MQTT_USER, MQTT_PASS, (TOPIC + "/status").c_str(), 1, true, "offline")) {
-      mqtt.publish((TOPIC + "/status").c_str(), "online", true);
-      mqtt.subscribe((TOPIC + "/cmd").c_str(), 1);
-      logEvent('I', "MQTT da ket noi %s:%d, topic %s", MQTT_HOST, MQTT_PORT, TOPIC.c_str());
-      teleNow = true;
-    } else {
-      Serial.printf("MQTT loi ket noi (state %d), thu lai sau %ds\n", mqtt.state(), MQTT_RETRY_MS / 1000);
-    }
+    if (lastTry && now - lastTry < MQTT_RETRY_MS) return;
+    lastTry = now;
+    mqttConnect();
     return;
   }
   mqtt.loop();
-  if (teleNow || millis() - lastTele >= TELE_MS) {
-    teleNow = false;
-    lastTele = millis();
-    if (mqtt.publish((TOPIC + "/telemetry").c_str(), telemetryJson().c_str())) mqttTx++;
+  // ----- gửi bù: tối đa 5 bản ghi mỗi vòng loop để không chặn vòng điều khiển -----
+  for (int i = 0; i < 5 && ringLen; i++) {
+    BufRec &r = ring[ringHead];
+    char buf[200];
+    snprintf(buf, sizeof(buf),
+      "{\"dev\":\"%s\",\"boot\":%u,\"seq\":%lu,\"up_ms\":%lu,\"t\":%s,\"h\":%s,\"code\":%u,\"valid\":%s,\"replay\":1}",
+      MQTT_DEVICE, bootNo, r.seq, r.ms, r.t == 0x7FFF ? "null" : String(r.t / 10.0, 1).c_str(),
+      r.h == 0x7FFF ? "null" : String(r.h / 10.0, 0).c_str(), r.code, r.code == E_OK && r.t != 0x7FFF ? "true" : "false");
+    if (!mqtt.publish((TOPIC + "/telemetry").c_str(), buf)) break;
+    ringHead = (ringHead + 1) % BUF_N; ringLen--; bufReplayed++;
+    if (!ringLen) logEvent('I', "B9 Da gui bu xong, tong gui bu %lu, bo %lu", bufReplayed, bufDropped);
   }
 }
 
+// LCD dòng 2: nhiệt độ/độ ẩm, chỉ ghi lại khi nội dung đổi để đỡ chiếm bus I2C
+void updateLcd() {
+  static unsigned long last = 0;
+  static char shown[17] = "";
+  if (!lcd::addr || millis() - last < 1000) return;
+  last = millis();
+  char s[17];
+  if (isnan(temperature)) snprintf(s, sizeof(s), "Cam bien: E%d", sensCode);
+  else snprintf(s, sizeof(s), "T:%.1fC  H:%.0f%%", temperature, humidity);
+  if (strcmp(s, shown)) { lcd::line(1, s); strcpy(shown, s); }
+}
+
 void setupMqtt() {
-  net.setTimeout(1);                   // giây; broker tắt thì mỗi lần thử chỉ chặn loop ~1 s
+  net.setCACert(CA_CERT);              // Bài 8: chỉ tin chứng chỉ do CA của nhóm cấp, không dùng setInsecure()
+  net.setHandshakeTimeout(5);
+  net.setTimeout(2);                   // giây; broker tắt thì mỗi lần thử chỉ chặn loop ngắn
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMqtt);
   mqtt.setBufferSize(1024);            // mặc định 256 byte không đủ cho telemetry
-  mqtt.setKeepAlive(15);
+  mqtt.setKeepAlive(15);               // mất mạng bất thường: broker phát LWT sau ~1,5 x 15 s
+  prefs.begin("ctrl", true); safeLock = prefs.getBool("lock", false); prefs.end();
+  configTzTime("ICT-7", "pool.ntp.org", "time.google.com");   // giờ lịch cho trường ts (không bắt buộc cho TLS)
 }
 
 void setupWiFi() {
@@ -953,6 +1178,11 @@ void setup() {
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
   Wire.setTimeOut(50);
+  if (lcd::begin()) {
+    lcd::line(0, LCD_WELCOME);
+    lcd::line(1, "Dang khoi dong..");
+    Serial.printf("LCD I2C 0x%02X: %s\n", lcd::addr, LCD_WELCOME);
+  } else Serial.println("Khong thay LCD I2C (0x20-0x27, 0x38-0x3F)");
 
   setupLogger();
   setupCtrl();
@@ -984,8 +1214,10 @@ void loop() {
   updateSensor();
   updateState();
   updateLogger();
+  updateFanSafety();
   updateMqtt();
   updateLoopTimer();
   if (busyReq) { cpuBusyTest(); busyReq = false; }
   updateBlink();
+  updateLcd();
 }

@@ -1,0 +1,14 @@
+{
+  "name": "lop-iot-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard lớp học: nghe dữ liệu ESP32 của các nhóm SV qua MQTT và phát trực tiếp lên web",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "sim": "node --env-file=.env tools/sim_nhom.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.1"
+  }
+}

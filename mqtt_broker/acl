@@ -1,0 +1,44 @@
+# Bài 8: danh sách kiểm soát truy cập (ACL). Mosquitto đọc lại khi khởi động hoặc nhận tín hiệu HUP.
+# Nguyên tắc: mặc định không có quyền gì; mỗi tài khoản chỉ được đúng các topic ghi dưới đây.
+# Các dòng trước "user" đầu tiên áp dụng cho client KHÔNG đăng nhập (chỉ có ở cổng 1883, xem mosquitto.conf).
+
+# Bài tập nhóm (lab_nhom): ESP32 của SV không cần tài khoản, chỉ được đọc/ghi nhánh lớp học vju/iot/...
+topic readwrite vju/iot/#
+
+# Dịch vụ app: đọc dữ liệu mọi node nhà kính; là bên duy nhất được GHI lệnh (cmd).
+# Không được ghi telemetry/status/ack thay thiết bị.
+user app
+topic read vju/nhakinh/+/status
+topic read vju/nhakinh/+/telemetry
+topic read vju/nhakinh/+/event
+topic read vju/nhakinh/+/ack
+topic readwrite vju/nhakinh/+/cmd
+# dashboard lớp học (lab_nhom/dashboard) dùng chung tài khoản dịch vụ này
+topic readwrite vju/iot/#
+
+# Người xem: chỉ đọc số đo, trạng thái và xác nhận; không đọc/ghi lệnh
+user viewer
+topic read vju/nhakinh/+/status
+topic read vju/nhakinh/+/telemetry
+topic read vju/nhakinh/+/ack
+
+# Mỗi node chỉ ghi dữ liệu của CHÍNH NÓ và chỉ nhận lệnh của chính nó.
+# Không được ghi vào cmd (kể cả cmd của mình) -> node không thể tự ra lệnh hoặc giả làm dịch vụ.
+user esp32-01
+topic write vju/nhakinh/esp32-01/status
+topic write vju/nhakinh/esp32-01/telemetry
+topic write vju/nhakinh/esp32-01/event
+topic write vju/nhakinh/esp32-01/ack
+topic read vju/nhakinh/esp32-01/cmd
+
+user sim-01
+topic write vju/nhakinh/sim-01/status
+topic write vju/nhakinh/sim-01/telemetry
+topic write vju/nhakinh/sim-01/event
+topic write vju/nhakinh/sim-01/ack
+topic read vju/nhakinh/sim-01/cmd
+
+user sleep-01
+topic write vju/nhakinh/sleep-01/status
+topic write vju/nhakinh/sleep-01/telemetry
+topic write vju/nhakinh/sleep-01/event

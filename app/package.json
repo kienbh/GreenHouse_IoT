@@ -6,9 +6,11 @@
   "private": true,
   "scripts": {
     "start": "node --env-file=.env server.js",
-    "sim": "node --env-file=.env tools/sim_esp32.js"
+    "sim": "node --env-file=.env tools/sim_esp32.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "better-sqlite3": "11.10.0",
     "mqtt": "^5.10.1",
     "three": "^0.170.0"
   }
