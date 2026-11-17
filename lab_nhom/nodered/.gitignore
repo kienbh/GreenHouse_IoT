@@ -1,0 +1,4 @@
+# Trạng thái lúc chạy của Node-RED (không phải mã nguồn)
+.config.*
+*.backup
+lib/

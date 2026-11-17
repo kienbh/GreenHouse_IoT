@@ -1,0 +1,39 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 15
+skinparam ArrowColor #374151
+skinparam noteBackgroundColor #F8FAFC
+skinparam noteBorderColor #94A3B8
+title UC | Nhà kính esp32-01 – chức năng sau Bài 6-9
+left to right direction
+actor "Người xem\n(viewer)" as V
+actor "Người vận hành\n(operator)" as O
+actor "Quản trị\n(admin)" as A
+actor "Dịch vụ luật\n(rule, service)" as R
+rectangle "Hệ nhà kính (app + broker + esp32-01)" {
+  usecase "Xem số đo, lịch sử,\ntrạng thái lệnh" as U1
+  usecase "Gửi lệnh LED/bơm\n(có ack theo cmd_id)" as U2
+  usecase "Chọn chế độ\ntự động/thủ công" as U3
+  usecase "Bật khóa an toàn" as U4
+  usecase "Mở khóa an toàn" as U5
+  usecase "Cấu hình ngưỡng, bơm,\nchu kỳ, dữ liệu thử" as U6
+  usecase "Xem audit log" as U7
+  usecase "Đề xuất lệnh thông gió\n(30/28 °C, lease 90 s)" as U8
+  usecase "Gửi bù dữ liệu\nsau mất mạng" as U9
+}
+V -- U1
+O -- U1
+O -- U2
+O -- U3
+O -- U4
+A -- U5
+A -- U6
+A -- U7
+A -- U2
+R -- U8
+U8 ..> U2 : <<include>>
+note right of U9 : do esp32-01 tự thực hiện\n(bộ đệm 30 bản ghi)
+note bottom of U2 : Đường nối Use Case = quyền dùng chức năng,\nKHÔNG phải luồng dữ liệu.\nQuyền kiểm tại server (auth.js) + ACL broker.
+@enduml

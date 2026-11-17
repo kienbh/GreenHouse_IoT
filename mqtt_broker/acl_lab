@@ -1,0 +1,3 @@
+# ACL cho cổng 1883 (không mã hóa, không mật khẩu) – chỉ dành cho bài tập nhóm lab_nhom.
+# Không có dòng "user" nào: client tự xưng tên tài khoản (vd "app") ở cổng này cũng KHÔNG có quyền gì.
+topic readwrite vju/iot/#

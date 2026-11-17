@@ -1,0 +1,46 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 15
+skinparam ArrowColor #374151
+skinparam noteBackgroundColor #F8FAFC
+skinparam noteBorderColor #94A3B8
+title AD | Luật thông gió (server) và khóa an toàn (esp32-01)
+start
+:Nhận telemetry esp32-01;
+if (Chế độ = tự động?) then (không)
+  :Không quyết định (thủ công);
+  stop
+endif
+if (Node khóa an toàn / bơm LỖI / auto tại node?) then (có)
+  :skip + ghi rule_log;
+  stop
+elseif (Dữ liệu cũ hơn 15 s hoặc lỗi cảm biến / t = null?) then (có)
+  :skip + ghi rule_log;
+  stop
+endif
+if (t >= 30 °C?) then (có)
+  :muốn BẬT;
+elseif (t <= 28 °C?) then (có)
+  :muốn TẮT;
+else (28 < t < 30)
+  :giữ trạng thái (dải trễ);
+endif
+if (Khác trạng thái LED xanh và đã >= 10 s từ lệnh trước?) then (có)
+  :Gửi {"ledG":x,"src":"auto","lease":90} (cmd_id, chờ ack);
+else (không)
+  if (Đang bật do luật và >= 30 s chưa gia hạn?) then (có)
+    :Gia hạn lease;
+  endif
+endif
+:Ghi rule_log (t, tuổi dữ liệu, quyết định, lý do, cmd_id);
+stop
+partition "Tại esp32-01 (mỗi vòng loop)" {
+  start
+  if (LED xanh do luật bật VÀ (khóa / lỗi cảm biến / bơm LỖI / hết lease)?) then (có)
+    :Tắt LED xanh + event "B7 Node tat...";
+  endif
+  stop
+}
+@enduml

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhà kính · Đăng nhập</title>
+<link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+<main class="shell">
+  <form id="f" class="card login-card">
+    <h1>Nhà kính IoT</h1>
+    <p class="hint">Đăng nhập theo vai: <b>xem</b> chỉ đọc · <b>vận hành</b> điều khiển · <b>quản trị</b> cấu hình. Quyền được kiểm tại máy chủ.</p>
+    <label for="user">Tài khoản</label><input id="user" autocomplete="username" required>
+    <label for="pass">Mật khẩu</label><input id="pass" type="password" autocomplete="current-password" required>
+    <button class="primary">Đăng nhập</button>
+    <p id="msg" class="command-feedback error" role="alert"></p>
+    <p class="hint" id="tls"></p>
+  </form>
+  <section class="card login-card accounts" aria-labelledby="accTitle">
+    <h2 id="accTitle">Tài khoản để kiểm thử phân quyền</h2>
+    <p id="accNote" class="hint">Đang tải…</p>
+    <table id="acc"><thead><tr><th>Tài khoản</th><th>Vai</th><th>Được làm</th><th>Mật khẩu</th><th></th></tr></thead><tbody></tbody></table>
+    <details class="settings"><summary>Ma trận vai – quyền (kiểm tại máy chủ)</summary><ul id="matrix" class="hint"></ul></details>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+if (location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(location.hostname))
+  $('#tls').textContent = 'Cảnh báo: đang dùng HTTP không mã hóa qua mạng. Hãy dùng địa chỉ https://…:3443.';
+const ACTION = { view: 'xem dữ liệu, lịch sử lệnh, nhật ký luật', control: 'LED, dải LED, chạy/dừng bơm, âm thanh, chế độ luật, BẬT khóa an toàn',
+  configure: 'ngưỡng, cấu hình bơm, chu kỳ, dữ liệu thử, giả lập mất mạng, MỞ khóa, JSON tự do', audit: 'xem nhật ký truy vết (audit)' };
+const ROLE = { viewer: 'chỉ xem', operator: 'vận hành', admin: 'quản trị' };
+fetch('/api/accounts').then((r) => r.json()).then((j) => {
+  $('#accNote').textContent = j.passwordsShown
+    ? 'CHẾ ĐỘ KIỂM THỬ: mật khẩu hiện vì SHOW_TEST_PASSWORDS=1 và đang mở từ chính máy chạy app. Đặt 0 trong app/.env trước khi demo.'
+    : 'Mật khẩu không hiển thị ở đây (xem app/data/accounts-app.local trên máy chạy app).';
+  const body = $('#acc tbody');
+  for (const a of j.accounts) {
+    const tr = document.createElement('tr');
+    const cells = [a.user, `${a.role} · ${ROLE[a.role] || ''}`, a.can.join(', '), a.pass || '••••••'];
+    for (const c of cells) { const td = document.createElement('td'); td.textContent = c; tr.append(td); }
+    const td = document.createElement('td'), b = document.createElement('button');
+    b.type = 'button'; b.textContent = 'Dùng';
+    b.onclick = () => { $('#user').value = a.user; $('#pass').value = a.pass || ''; (a.pass ? $('#f button.primary') : $('#pass')).focus(); };
+    td.append(b); tr.append(td); body.append(tr);
+  }
+  for (const [act, roles] of Object.entries(j.permissions)) {
+    const li = document.createElement('li'); li.textContent = `${act} (${ACTION[act]}): ${roles.join(', ')}`; $('#matrix').append(li);
+  }
+}).catch(() => { $('#accNote').textContent = 'Không tải được danh sách tài khoản.'; });
+$('#f').onsubmit = async (e) => {
+  e.preventDefault(); $('#msg').textContent = '';
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: $('#user').value.trim(), pass: $('#pass').value }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.err === 'sai tai khoan hoac mat khau' ? 'Sai tài khoản hoặc mật khẩu.' : j.err?.startsWith('tam khoa') ? 'Sai quá nhiều lần, thử lại sau 1 phút.' : j.err || r.status);
+    const next = new URLSearchParams(location.search).get('next');
+    location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  } catch (err) { $('#msg').textContent = err.message; }
+};
+</script>
+</body>
+</html>

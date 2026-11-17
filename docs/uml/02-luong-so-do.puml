@@ -1,0 +1,37 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 15
+skinparam ArrowColor #374151
+skinparam noteBackgroundColor #F8FAFC
+skinparam noteBorderColor #94A3B8
+title SD-01 | Một số đo: esp32-01 -> broker (TLS) -> app -> SQLite -> dashboard
+hide footbox
+autonumber
+participant "Uno + DHT11\n(I2C 0x08)" as S
+participant "esp32-01 : Firmware" as N
+participant "Mosquitto :8883\n(TLS + ACL)" as B
+participant "app : server.js" as App
+database "mqtt.sqlite" as DB
+participant "Dashboard\n(SSE)" as UI
+N -> S : requestFrom(0x08, 4)
+S --> N : t×10, h×10 (0x7FFF = lỗi)
+N -> N : seq++, boot, up_ms, ts (NTP), valid
+alt MQTT đang nối
+  N ->> B : PUBLISH telemetry {dev,boot,seq,...} (user esp32-01)
+  B -> B : ACL: esp32-01 chỉ ghi nhánh của mình
+  B ->> App : telemetry (user app, QoS1 subscribe)
+  App -> DB : append(topic, payload, qos, retain) – ghi TRƯỚC khi parse
+  App -> App : JSON.parse, cập nhật tele/teleAt, CSV
+  App ->> UI : SSE {kind:telemetry}
+  App -> App : runRule() nếu chế độ tự động
+else mất kết nối
+  N -> N : bufPush(seq, t, h) – đầy 30 thì bỏ bản cũ nhất
+  ... nối lại ...
+  N ->> B : PUBLISH telemetry {seq, replay:1} (tối đa 5/vòng loop)
+  B ->> App : bản ghi gửi bù
+  App -> DB : append (không thay trạng thái trực tiếp)
+end
+note over App, UI : Dashboard báo "dữ liệu cũ" khi > 15 s không có telemetry;\nkhông hiển thị 0 thay cho dữ liệu thiếu (null).
+@enduml

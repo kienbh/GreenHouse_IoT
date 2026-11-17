@@ -1,229 +1,43 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nhà kính MQTT</title>
-<style>
-  :root { --bg:#f4f6f3; --card:#fff; --fg:#1d2420; --mut:#66706a; --line:#dfe4df; --acc:#2f7d4f;
-          --red:#c8432f; --amb:#c98a12; --t:#d0562c; --h:#2c74c9; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#121513; --card:#1b201d; --fg:#e4e9e5; --mut:#8c968f; --line:#2c332e; --acc:#55b07a;
-            --red:#e2664f; --amb:#e0a530; --t:#ee7a4f; --h:#5b9be6; }
-  }
-  * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif }
-  header { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card) }
-  header h1 { font-size:18px; margin:0 auto 0 0 }
-  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)) }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px }
-  .card h2 { font-size:14px; margin:0 0 10px; color:var(--mut); font-weight:600; text-transform:uppercase; letter-spacing:.04em }
-  .wide { grid-column:1/-1 }
-  .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid var(--line); font-size:13px }
-  .dot { width:9px; height:9px; border-radius:50% ; background:var(--mut) }
-  .ok .dot { background:var(--acc) } .bad .dot { background:var(--red) }
-  .big { display:flex; gap:24px }
-  .big div { font-size:34px; font-weight:650; font-variant-numeric:tabular-nums }
-  .big small { display:block; font-size:12px; color:var(--mut); font-weight:400 }
-  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 }
-  .row label { min-width:92px; color:var(--mut) }
-  button, select, input { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:7px; padding:6px 11px }
-  button { cursor:pointer } button:hover { border-color:var(--acc) }
-  button.on { background:var(--acc); color:#fff; border-color:var(--acc) }
-  button.danger { border-color:var(--red); color:var(--red) }
-  input[type=number] { width:76px }
-  canvas { width:100%; height:240px; display:block }
-  .st { font-weight:650 } .st.CHAY { color:var(--acc) } .st.LOI { color:var(--red) }
-  .mut { color:var(--mut); font-size:13px }
-  #events, #raw { font:12.5px/1.5 ui-monospace,Menlo,monospace; max-height:240px; overflow:auto; margin:0; padding:0; list-style:none }
-  #events li, #raw li { padding:2px 0; border-bottom:1px dashed var(--line); word-break:break-word }
-  .lvE { color:var(--red) } .lvW { color:var(--amb) }
-  textarea { width:100%; font:13px ui-monospace,Menlo,monospace; background:var(--bg); color:inherit; border:1px solid var(--line); border-radius:7px; padding:8px }
-  a { color:var(--acc) }
-</style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhà kính · Tổng quan</title>
+<link rel="stylesheet" href="/dashboard.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+<script type="module" src="/dashboard.js"></script>
 </head>
 <body>
-<header>
-  <h1>Nhà kính · MQTT <a href="/3d.html" style="font-size:14px;font-weight:500">xem bản sao số 3D →</a></h1>
-  <span id="broker" class="pill"><span class="dot"></span><span>broker</span></span>
-  <select id="dev" title="Thiết bị"></select>
-  <span id="online" class="pill"><span class="dot"></span><span>--</span></span>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Nhà kính IoT, trang tổng quan"><span class="brand-mark" aria-hidden="true">♧</span><span><strong>Nhà kính IoT</strong><small>GIÁM SÁT &amp; ĐIỀU KHIỂN</small></span></a>
+  <nav aria-label="Điều hướng"><a id="navOverview" href="/">Tổng quan</a><a id="navTwin" href="/3d.html">Bản sao số</a><span id="who" class="pill">Đang kiểm tra đăng nhập…</span><button id="logout" class="ghost">Đăng xuất</button></nav>
 </header>
-<main>
-  <section class="card">
-    <h2>Cảm biến</h2>
-    <div class="big">
-      <div><small>Nhiệt độ</small><span id="t">--</span> °C</div>
-      <div><small>Độ ẩm</small><span id="h">--</span> %</div>
+<main class="shell">
+  <div class="page-heading"><div><span class="eyebrow">Không gian vận hành</span><h1>Điều hành nhà kính</h1><p>Cảm biến, thiết bị và mô hình trong một góc nhìn.</p><p id="perm" class="hint">Đang kiểm tra quyền…</p></div><div class="device-select"><label for="dev">Thiết bị đang xem</label><select id="dev"><option value="">Đang kết nối…</option></select></div></div>
+  <section id="connection" class="connection muted" aria-label="Tình trạng kết nối"><span class="status-orb" aria-hidden="true"></span><div><strong id="connectionTitle">Đang kết nối ứng dụng</strong><p id="connectionDetail">Chờ dữ liệu từ MQTT…</p></div><div class="status-group"><span id="broker" class="pill">MQTT: đang chờ</span><span id="online" class="pill">ESP32: đang chờ</span></div></section>
+  <div class="workspace">
+    <div class="dashboard" id="panel">
+      <section class="metrics" aria-label="Thông số chính">
+        <article class="card metric"><div class="metric-label">Nhiệt độ <span class="metric-icon" aria-hidden="true">°</span></div><div class="metric-value"><span id="t">--</span> <small>°C</small></div><p id="sensorState">Chờ cảm biến</p></article>
+        <article class="card metric humidity"><div class="metric-label">Độ ẩm <span class="metric-icon" aria-hidden="true">≈</span></div><div class="metric-value"><span id="h">--</span> <small>%</small></div><p id="freshness">Chưa có dữ liệu</p></article>
+        <article class="card metric pump-metric"><div class="metric-label">Máy bơm <span class="metric-icon" aria-hidden="true">↻</span></div><div id="pumpMetric" class="metric-value">--</div><p id="pumpMetricInfo">Chờ trạng thái</p></article>
+      </section>
+      <section class="card" aria-labelledby="chartTitle"><div class="section-head"><div><h2 id="chartTitle">Diễn biến môi trường</h2><p>30 phút gần nhất</p></div><div class="legend"><span>Nhiệt độ · °C</span><span>Độ ẩm · %</span></div></div><div class="chart-wrap"><canvas id="chart" role="img" aria-label="Biểu đồ nhiệt độ và độ ẩm trong 30 phút gần nhất"></canvas></div><div class="chart-footer"><span id="meta">Chưa nhận được telemetry</span><span>Tải CSV hôm nay<a id="csvT" aria-disabled="true">Cảm biến ↓</a><a id="csvE" aria-disabled="true">Sự kiện ↓</a></span></div></section>
+      <div class="controls-grid">
+        <section class="card" aria-labelledby="pumpTitle"><div class="section-head"><div><h2 id="pumpTitle">Điều khiển máy bơm</h2><p>Thao tác với thiết bị thật</p></div></div><div class="pump-summary"><span id="pst" class="st">--</span><span id="pinfo" class="mut"></span></div><p id="pmsg" class="mut">Chờ dữ liệu từ thiết bị.</p><div class="actions"><button id="pStart" class="primary" data-control="start" disabled>Chạy bơm</button><button id="pStop" class="danger" data-control="stopPump" disabled>Dừng bơm</button></div><p id="pumpHint" class="hint">Điều khiển chỉ khả dụng khi dữ liệu mới và thiết bị trực tuyến.</p><details class="settings"><summary>Cấu hình công suất &amp; thời gian</summary><div class="field-grid"><label for="duty">Công suất (%)<input id="duty" type="number" min="1" max="100" step="1" data-control data-perm="configure" disabled></label><label for="lim">Chạy tối đa (s)<input id="lim" type="number" min="3" max="300" step="1" data-control data-perm="configure" disabled></label><label for="cd">Nghỉ (s)<input id="cd" type="number" min="0" max="600" step="1" data-control data-perm="configure" disabled></label></div><button id="cfgSet" class="full" style="margin-top:10px" data-control data-perm="configure" disabled>Lưu cấu hình bơm</button></details></section>
+        <section class="card" aria-labelledby="lightsTitle"><div class="section-head"><div><h2 id="lightsTitle">Đèn &amp; tự động hóa</h2><p id="autoHint">Điều khiển riêng từng đèn</p></div></div><div class="toggle-row"><span>LED đỏ</span><button data-k="ledR" data-control="ledR" aria-label="Bật tắt LED đỏ" aria-pressed="false" disabled>--</button></div><div class="toggle-row"><span>LED xanh</span><button data-k="ledG" data-control="ledG" aria-label="Bật tắt LED xanh" aria-pressed="false" disabled>--</button></div><div class="toggle-row"><span>Dải LED</span><div class="segmented" role="group" aria-label="Chế độ dải LED"><button data-arr="0" data-control disabled>Tắt</button><button data-arr="1" data-control disabled>Bật</button><button data-arr="2" data-control disabled>Nháy</button></div></div><div class="toggle-row"><span>Tự động tại ESP32 (LED đỏ/xanh)</span><button data-k="auto" data-control data-perm="configure" aria-label="Bật tắt tự động tại ESP32" aria-pressed="false" disabled>--</button></div><div class="threshold"><label for="th">Ngưỡng (°C)</label><input id="th" type="number" min="0" max="50" step="0.5" data-control data-perm="configure" disabled><button id="thSet" data-control data-perm="configure" disabled>Áp dụng</button></div></section>
+      </div>
+      <div class="controls-grid">
+        <section class="card" aria-labelledby="ruleTitle"><div class="section-head"><div><h2 id="ruleTitle">Luật tự động &amp; khóa an toàn</h2><p id="ruleInfo">Luật thông gió chạy trên dịch vụ</p></div><span id="modeBadge" class="badge">--</span></div><div class="toggle-row"><span>Chế độ luật</span><div class="segmented" role="group" aria-label="Chế độ luật tự động"><button id="modeManual" data-control="mode" disabled>Thủ công</button><button id="modeAuto" data-control="mode" disabled>Tự động</button></div></div><p id="fanInfo" class="hint">LED xanh giả lập quạt thông gió.</p><div class="toggle-row"><span>Khóa an toàn tại ESP32</span><div class="actions"><button id="lockOn" class="danger" data-control="lockOn" disabled>Khóa</button><button id="lockOff" data-control="lockOff" data-perm="configure" disabled>Mở khóa</button></div></div><p id="lockInfo" class="hint">Khóa: dừng bơm, tắt tải do luật bật, ESP32 từ chối lệnh tự động. Chỉ quản trị được mở khóa.</p><details class="settings"><summary>Nhật ký quyết định của luật</summary><ul id="ruleLog" class="event-list"><li class="empty">Chưa có.</li></ul></details></section>
+        <section class="card" aria-labelledby="cmdTitle"><div class="section-head"><div><h2 id="cmdTitle">Lệnh gần đây</h2><p>Chỉ "đã xác nhận" khi ESP32 gửi ack đúng mã lệnh</p></div></div><ul id="cmds" class="event-list cmd-list"><li class="empty">Chưa có lệnh.</li></ul></section>
+      </div>
+      <p id="sent" class="command-feedback" role="status" aria-live="polite"></p>
+      <section class="card" aria-labelledby="eventsTitle"><div class="section-head"><div><h2 id="eventsTitle">Nhật ký hoạt động</h2><p>Sự kiện của thiết bị đang chọn</p></div><span id="eventCount" class="badge">0 sự kiện</span></div><ul id="events" class="event-list"><li class="empty">Chưa có sự kiện.</li></ul></section>
     </div>
-    <p class="mut" id="meta">Chưa có dữ liệu</p>
-  </section>
-
-  <section class="card">
-    <h2>Đèn &amp; tự động</h2>
-    <div class="row"><label>LED đỏ</label><button data-k="ledR">Tắt</button></div>
-    <div class="row"><label>LED xanh</label><button data-k="ledG">Tắt</button></div>
-    <div class="row"><label>Dải LED</label>
-      <button data-arr="0">Tắt</button><button data-arr="1">Bật</button><button data-arr="2">Nháy</button></div>
-    <div class="row"><label>Tự động</label><button data-k="auto">Tắt</button>
-      <span class="mut">ngưỡng</span><input id="th" type="number" step="0.5" min="0" max="50"><button id="thSet">Đặt</button></div>
-  </section>
-
-  <section class="card">
-    <h2>Máy bơm (FSM Bài 3)</h2>
-    <div class="row"><label>Trạng thái</label><span id="pst" class="st">--</span><span class="mut" id="pinfo"></span></div>
-    <p class="mut" id="pmsg"></p>
-    <div class="row"><button id="pStart" class="on">Chạy</button><button id="pStop" class="danger">Dừng</button></div>
-    <div class="row"><label>Duty %</label><input id="duty" type="number" min="1" max="100">
-      <span class="mut">tối đa s</span><input id="lim" type="number" min="3" max="300">
-      <span class="mut">nghỉ s</span><input id="cd" type="number" min="0" max="600"><button id="cfgSet">Lưu</button></div>
-  </section>
-
-  <section class="card wide">
-    <h2>Biểu đồ <span class="mut" style="text-transform:none">· <span style="color:var(--t)">nhiệt độ</span> · <span style="color:var(--h)">độ ẩm</span></span></h2>
-    <canvas id="chart"></canvas>
-    <p class="mut">Tải CSV hôm nay: <a id="csvT" href="#">telemetry</a> · <a id="csvE" href="#">events</a></p>
-  </section>
-
-  <section class="card">
-    <h2>Sự kiện từ ESP32</h2>
-    <ul id="events"></ul>
-  </section>
-
-  <section class="card">
-    <h2>Gửi lệnh JSON thô</h2>
-    <textarea id="cmd" rows="3">{"ledG":1}</textarea>
-    <div class="row"><button id="send">Gửi lên topic cmd</button><span class="mut" id="sent"></span></div>
-    <h2 style="margin-top:12px">Tin MQTT nhận được</h2>
-    <ul id="raw"></ul>
-  </section>
+    <aside class="twin-column" aria-labelledby="twinTitle"><section class="card twin-card"><div class="section-head"><div><h2 id="twinTitle">Bản sao số 3D</h2><p>Quan sát nhà kính và từng bộ phận</p></div><span class="badge">CHỈ QUAN SÁT</span></div><div class="viewport"><div id="view" aria-label="Mô hình 3D nhà kính"></div><div id="loading">Đang tải mô hình 3D…</div><div id="viewState" class="view-state">Chờ dữ liệu từ thiết bị</div></div><div id="views" role="group" aria-label="Góc nhìn mô hình"><button data-cam="iso">Phối cảnh</button><button data-cam="front">Trước</button><button data-cam="top">Trên</button><button data-cam="right">Phải</button></div><p class="twin-help">Kéo để xoay · cuộn để phóng to.<br>Bấm bộ phận để xem thông tin, không gửi lệnh.</p><div class="inspection" aria-live="polite"><strong id="inspectTitle">Khám phá mô hình</strong><p id="inspectText">Chọn nhãn hoặc bộ phận. Các nút điều khiển thiết bị nằm trong dashboard.</p><p id="pick"></p></div><div class="twin-details"><div><div class="section-head"><h2>Bình nước</h2><span class="badge">MÔ PHỎNG</span></div><div class="row"><div class="bar"><i id="wBar"></i></div><b id="wPct">--</b></div><p id="wMsg" class="hint">Chưa có cảm biến mực nước. Không dùng để quyết định tưới.</p></div><details class="settings"><summary>Âm thanh thiết bị · Buzzer</summary><p class="hint">Các nút này phát âm thanh trên thiết bị thật.</p><div id="songs"></div></details></div></section></aside>
+  </div>
+  <details class="card technical"><summary>Công cụ kỹ thuật · MQTT &amp; JSON</summary><div class="advanced-grid"><section><h3>Gửi lệnh JSON</h3><p class="hint">Dành cho kiểm thử, chỉ tài khoản quản trị. Lệnh được gửi tới thiết bị đang chọn và chờ xác nhận như mọi lệnh khác.</p><label class="visually-hidden" for="cmd">Nội dung lệnh JSON</label><textarea id="cmd" rows="3" data-control data-perm="configure" disabled>{"ledG":1}</textarea><button id="send" data-control data-perm="configure" disabled>Gửi lệnh JSON</button></section><section><h3>Tin MQTT của thiết bị đang chọn</h3><ul id="raw"><li class="empty">Chưa có bản tin trong phiên xem này.</li></ul></section></div></details>
+  <footer class="footer"><span>Nhà kính IoT · MQTT / ESP32</span><span>Chỉ báo thời gian dùng lúc ứng dụng nhận telemetry.</span></footer>
 </main>
-
-<script>
-const $ = (s) => document.querySelector(s);
-let S = { devices: {} }, cur = null;
-try { cur = localStorage.getItem('dev'); } catch {}
-
-const fmtTime = (ts) => new Date(ts).toLocaleTimeString('vi-VN');
-function pill(el, ok, text) {
-  el.classList.toggle('ok', ok === true); el.classList.toggle('bad', ok === false);
-  el.lastElementChild.textContent = text;
-}
-
-async function send(cmd) {
-  if (!cur) return;
-  const r = await fetch('/api/cmd/' + encodeURIComponent(cur), { method: 'POST', body: JSON.stringify(cmd) });
-  const j = await r.json();
-  $('#sent').textContent = j.ok ? 'đã gửi ' + j.sent : 'lỗi: ' + j.err;
-}
-
-function renderDevList() {
-  const names = Object.keys(S.devices).sort();
-  if (!cur || !names.includes(cur)) cur = names[0] || null;
-  $('#dev').innerHTML = names.map((n) => `<option ${n === cur ? 'selected' : ''}>${n}</option>`).join('') || '<option>(chưa có ESP32)</option>';
-}
-
-function render() {
-  pill($('#broker'), S.broker, S.broker ? 'broker OK' : 'mất broker');
-  const d = S.devices[cur];
-  if (!d) return;
-  pill($('#online'), d.status === 'online' ? true : d.status === 'offline' ? false : null, d.status);
-  $('#csvT').href = `/api/csv/${cur}/telemetry`; $('#csvE').href = `/api/csv/${cur}/events`;
-  const x = d.tele;
-  if (x) {
-    $('#t').textContent = x.t ?? '--'; $('#h').textContent = x.h ?? '--';
-    $('#meta').textContent = `cập nhật ${fmtTime(d.seen)} · mã cảm biến ${x.code} · RSSI ${x.rssi} dBm · chạy ${x.up}s · boot #${x.boot}`;
-    for (const b of document.querySelectorAll('[data-k]')) {
-      const on = !!x[b.dataset.k]; b.classList.toggle('on', on); b.textContent = on ? 'Bật' : 'Tắt';
-      if (b.dataset.k !== 'auto') b.disabled = !!x.auto;   // tự động thì ESP32 tự điều khiển LED R/G
-    }
-    for (const b of document.querySelectorAll('[data-arr]')) b.classList.toggle('on', +b.dataset.arr === x.ledArray);
-    const p = x.pump || {};
-    $('#pst').textContent = p.st; $('#pst').className = 'st ' + p.st;
-    $('#pinfo').textContent = p.st === 'CHAY' ? `${p.el}/${p.lim}s · ra ${p.out}%` : p.cool ? `nghỉ còn ${p.cool}s` : '';
-    $('#pmsg').textContent = p.msg || '';
-    for (const [id, v] of [['th', x.th], ['duty', p.duty], ['lim', p.lim], ['cd', p.cd]])
-      if (document.activeElement !== $('#' + id)) $('#' + id).value = v;
-  }
-  $('#events').innerHTML = d.events.slice().reverse().map((e) =>
-    `<li class="lv${e.lv}">${fmtTime(e.ts)} [${e.lv}] ${e.msg.replace(/</g, '&lt;')}</li>`).join('');
-  drawChart(d.hist);
-}
-
-function drawChart(hist) {
-  const c = $('#chart'), dpr = devicePixelRatio || 1;
-  const W = c.clientWidth, H = c.clientHeight;
-  c.width = W * dpr; c.height = H * dpr;
-  const g = c.getContext('2d'); g.scale(dpr, dpr);
-  const css = getComputedStyle(document.documentElement);
-  const col = (n) => css.getPropertyValue(n).trim();
-  const now = Date.now(), span = 30 * 60e3;             // 30 phút gần nhất
-  const pts = hist.filter((p) => p[0] >= now - span);
-  const L = 36, R = W - 36, T = 10, B = H - 22;
-  g.font = '11px system-ui'; g.fillStyle = col('--mut'); g.strokeStyle = col('--line'); g.lineWidth = 1;
-  const tv = pts.map((p) => p[1]).filter((v) => v != null);
-  const tMin = Math.floor(Math.min(...tv, 20) - 1), tMax = Math.ceil(Math.max(...tv, 35) + 1);
-  for (let i = 0; i <= 4; i++) {
-    const y = T + (B - T) * i / 4;
-    g.beginPath(); g.moveTo(L, y); g.lineTo(R, y); g.stroke();
-    g.textAlign = 'right'; g.fillText((tMax - (tMax - tMin) * i / 4).toFixed(0) + '°', L - 4, y + 4);
-    g.textAlign = 'left'; g.fillText((100 - 25 * i) + '%', R + 4, y + 4);
-  }
-  g.textAlign = 'center';
-  for (let m = 30; m >= 0; m -= 10) g.fillText(m ? `-${m} ph` : 'bây giờ', L + (R - L) * (1 - m / 30), H - 6);
-  if (!pts.length) { g.fillText('Chưa có dữ liệu trong 30 phút qua', (L + R) / 2, (T + B) / 2); return; }
-  const X = (ts) => L + (R - L) * (ts - (now - span)) / span;
-  const line = (idx, color, Y) => {
-    g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
-    let pen = false;
-    for (const p of pts) {
-      if (p[idx] == null) { pen = false; continue; }
-      pen ? g.lineTo(X(p[0]), Y(p[idx])) : g.moveTo(X(p[0]), Y(p[idx])); pen = true;
-    }
-    g.stroke();
-  };
-  line(2, col('--h'), (v) => B - (B - T) * v / 100);
-  line(1, col('--t'), (v) => B - (B - T) * (v - tMin) / (tMax - tMin));
-}
-
-function logRaw(m) {
-  const li = document.createElement('li');
-  li.textContent = `${fmtTime(m.ts)} ${m.dev}/${m.kind} ${typeof m.data === 'string' ? m.data : JSON.stringify(m.data)}`;
-  const ul = $('#raw'); ul.prepend(li);
-  while (ul.children.length > 60) ul.lastChild.remove();
-}
-
-// ===== Nhận dữ liệu tức thời từ app (SSE) =====
-const es = new EventSource('/stream');
-es.onmessage = (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.kind === 'snapshot') { S = m; renderDevList(); return render(); }
-  if (m.kind === 'broker') { S.broker = m.ok; return render(); }
-  const d = S.devices[m.dev] ||= { status: 'unknown', tele: null, seen: 0, hist: [], events: [] };
-  d.seen = m.ts;
-  if (m.kind === 'status') d.status = m.data;
-  if (m.kind === 'telemetry') { d.tele = m.data; d.hist.push([m.ts, m.data.t, m.data.h]); }
-  if (m.kind === 'event') { m.data.ts = m.ts; d.events.push(m.data); if (d.events.length > 200) d.events.shift(); }
-  if (![...$('#dev').options].some((o) => o.text === m.dev)) renderDevList();
-  logRaw(m);
-  if (m.dev === cur) render();
-};
-es.onerror = () => pill($('#broker'), false, 'mất app');
-
-// ===== Nút điều khiển -> lệnh JSON =====
-$('#dev').onchange = (e) => { cur = e.target.value; try { localStorage.setItem('dev', cur); } catch {} render(); };
-for (const b of document.querySelectorAll('[data-k]'))
-  b.onclick = () => send({ [b.dataset.k]: b.classList.contains('on') ? 0 : 1 });
-for (const b of document.querySelectorAll('[data-arr]')) b.onclick = () => send({ ledArray: +b.dataset.arr });
-$('#thSet').onclick = () => send({ th: +$('#th').value });
-$('#pStart').onclick = () => send({ cmd: 'start' });
-$('#pStop').onclick = () => send({ cmd: 'stop' });
-$('#cfgSet').onclick = () => send({ duty: +$('#duty').value, lim: +$('#lim').value, cd: +$('#cd').value });
-$('#send').onclick = () => {
-  try { send(JSON.parse($('#cmd').value)); } catch { $('#sent').textContent = 'JSON không hợp lệ'; }
-};
-addEventListener('resize', render);
-setInterval(render, 5000);   // cập nhật trục thời gian và phát hiện mất tín hiệu
-</script>
 </body>
 </html>

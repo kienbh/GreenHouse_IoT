@@ -1,4 +1,7 @@
 #!/bin/zsh
-# Xem mọi tin nhắn của nhà kính: ./sub.sh   (hoặc ./sub.sh '#' để xem tất cả topic)
+# Xem tin nhắn nhà kính qua TLS: ./sub.sh   (hoặc ./sub.sh 'vju/nhakinh/+/ack')
+# Mặc định tài khoản chỉ đọc viewer (status/telemetry/ack); xem cả event/cmd: ACC=app ./sub.sh
+cd "$(dirname "$0")"
 export PATH="/opt/homebrew/bin:/opt/homebrew/opt/mosquitto/bin:$PATH"
-exec mosquitto_sub -h localhost -u app -P apppass -v -t "${1:-vju/nhakinh/#}"
+ACC=${ACC:-viewer}
+exec mosquitto_sub -h localhost -p 8883 --cafile tls/ca.crt -u $ACC -P "$(awk -v u=$ACC '$1==u{print $2}' accounts.local)" -v -t "${1:-vju/nhakinh/#}"

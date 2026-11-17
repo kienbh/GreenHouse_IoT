@@ -1,0 +1,15 @@
+Broker 172.16.51.164 · 2026-11-17 15:45:17 · mosquitto version 2.1.2
+| Ca thử                                           | Mong đợi   | Kết quả thực tế
+| ------                                           | --------   | ---------------
+| viewer, đúng mật khẩu, CA nhóm, TLS 8883         | kết nối    | KẾT NỐI OK
+| viewer, SAI mật khẩu                             | từ chối    | TỪ CHỐI: sai tài khoản/mật khẩu
+| không tài khoản ở cổng TLS                       | từ chối    | TỪ CHỐI: sai tài khoản/mật khẩu
+| CA không tin cậy (CA hệ thống, không có CA nhóm) | từ chối    | TỪ CHỐI TLS (rc=14 Error: Protocol error)
+| sai tên máy chủ (sai-ten.vju.local)              | từ chối    | TỪ CHỐI TLS (hostname mismatch)
+| app gửi lệnh qua TLS (dịch vụ)                   | đi qua     | ĐI QUA (bên nhận thấy)
+| esp32-01 gửi telemetry của mình                  | đi qua     | ĐI QUA (bên nhận thấy)
+| esp32-01 tự gửi lệnh lên cmd                     | chặn       | BỊ CHẶN (bên nhận không thấy)
+| esp32-01 giả làm sim-01 (telemetry)              | chặn       | BỊ CHẶN (bên nhận không thấy)
+| viewer gửi lệnh                                  | chặn       | BỊ CHẶN (bên nhận không thấy)
+| tài khoản app ở cổng 1883 không mã hóa           | chặn       | BỊ CHẶN (bên nhận không thấy)
+| vô danh ở 1883 ghi vào nhánh nhà kính            | chặn       | BỊ CHẶN (bên nhận không thấy)

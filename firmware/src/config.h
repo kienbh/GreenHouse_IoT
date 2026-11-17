@@ -10,6 +10,7 @@
 #define PIN_I2C_SDA    33   // nối Uno A4
 #define PIN_I2C_SCL    32   // nối Uno A5
 #define UNO_I2C_ADDR   0x08
+#define LCD_WELCOME    "Welcome to BCSE!"   // LCD 16x2 I2C chung bus với Uno, dòng 2 hiện nhiệt độ/độ ẩm
 
 #define BLINK_MS       500  // chu kỳ nháy dải LED (sáng 500ms, tắt 500ms)
 
@@ -45,3 +46,8 @@
 #define MQTT_BASE      "vju/nhakinh/"
 #define TELE_MS        5000           // chu kỳ gửi telemetry
 #define MQTT_RETRY_MS  5000           // mất kết nối thì thử lại sau bao lâu
+
+// ===== Bài 6-9 =====
+#define DEDUP_N        16             // nhớ 16 cmd_id gần nhất để phát hiện lệnh gửi lại
+#define FAN_LEASE_S    90             // lệnh tự động bật LED xanh (quạt) hết hạn sau 90 s nếu dịch vụ không gia hạn
+#define BUF_N          30             // bộ đệm 30 bản ghi khi mất kết nối (2 s/bản ghi -> chịu được ~60 s)

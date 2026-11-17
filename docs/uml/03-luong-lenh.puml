@@ -1,0 +1,42 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 15
+skinparam ArrowColor #374151
+skinparam noteBackgroundColor #F8FAFC
+skinparam noteBorderColor #94A3B8
+title SD-02 | Một lệnh có kiểm quyền và xác nhận (cmd_id)
+hide footbox
+autonumber
+actor "van-hanh" as U
+participant "Dashboard" as UI
+participant "app : API /api/cmd" as App
+database "commands\n+ audit" as DB
+participant "Mosquitto :8883" as B
+participant "esp32-01" as N
+U -> UI : bấm "LED đỏ"
+UI -> App : POST /api/cmd/esp32-01 {"ledR":1} (cookie phiên)
+App -> App : session + can(role, actionFor(cmd))
+alt thiếu quyền / chưa đăng nhập
+  App -> DB : audit(result=forbidden|unauthenticated)
+  App --> UI : 403 / 401 (không có bản tin nào tới broker)
+else được phép
+  App -> DB : insert(cmd_id, pending) + audit(sent)
+  App ->> B : PUBLISH cmd {"ledR":1,"cmd_id":"esp32-01-…","src":"manual"} QoS1
+  App --> UI : 202 {status: pending} – "đang chờ xác nhận"
+  B ->> N : cmd (ACL: chỉ app được ghi cmd)
+  alt cmd_id đã thấy (gửi lại)
+    N ->> B : ack {status:"duplicate", reason:<kết quả lần đầu>} – KHÔNG thực hiện lại
+  else lệnh mới
+    N -> N : setFrom / ctrlFrom / extFrom -> applyOutputs, FSM bơm
+    N ->> B : ack {cmd_id, status:"applied"|"rejected", reason, state}
+  end
+  B ->> App : ack
+  App -> DB : status, latency_ms, ack_payload
+  App ->> UI : SSE {kind:cmd} – chỉ lúc này mới hiện "đã xác nhận"
+end
+... nếu 5 s không có ack ...
+App -> DB : status = timeout ("chưa xác nhận", không suy ra thiết bị đã/không làm)
+note right of N : ack chỉ chứng minh firmware đã ghi đầu ra;\ncơ cấu thật phải được quan sát/đo riêng.
+@enduml

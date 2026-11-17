@@ -12,3 +12,14 @@ mqtt_broker/log/
 app/data/
 # Model gốc Meshy 81 MB, repo chỉ giữ bản nén app/public/models/nhakinh.glb
 assess/
+lab_nhom/dashboard/data/
+# Bài 8: khóa bí mật TLS và danh sách mật khẩu sinh ngẫu nhiên
+mqtt_broker/tls/*.key
+mqtt_broker/tls/*.srl
+mqtt_broker/accounts.local
+app/users.json
+app/backups/
+firmware_sleep/src/sleep_secrets.h
+# Mô hình CAD gốc 53 MB (bản cho web: app/public/models/nhakinh-cad.glb)
+*.STEP
+*.step

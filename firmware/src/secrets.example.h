@@ -6,6 +6,6 @@
 
 // Broker Mosquitto trên PC: IP của PC in ra khi chạy mqtt_broker/start.sh
 #define MQTT_HOST  "192.168.1.10"
-#define MQTT_PORT  1883
-#define MQTT_USER  "esp32"            // tài khoản tạo bằng mqtt_broker/setup.sh
-#define MQTT_PASS  "esp32pass"
+#define MQTT_PORT  8883            // Bài 8: MQTT qua TLS (cổng 1883 không còn nhận tài khoản nhà kính)
+#define MQTT_USER  "esp32-01"       // tài khoản riêng của node, tạo bằng mqtt_broker/setup.sh
+#define MQTT_PASS  "DOI_MAT_KHAU"   // mật khẩu ngẫu nhiên trong mqtt_broker/accounts.local

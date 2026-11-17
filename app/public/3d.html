@@ -1,351 +1,43 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nhà kính 3D</title>
-<style>
-  :root { --bg:#0f1311; --panel:rgba(22,27,24,.92); --fg:#e4e9e5; --mut:#8c968f; --line:#2f3732; --acc:#55b07a;
-          --red:#e2664f; --amb:#e0a530; --blue:#5b9be6; }
-  :root[data-theme="light"] { --bg:#eef1ee; --panel:rgba(255,255,255,.94); --fg:#1d2420; --mut:#5f6963; --line:#d6dcd7; --acc:#2f7d4f; }
-  * { box-sizing:border-box }
-  html, body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif }
-  #view { position:fixed; inset:0 }
-  #panel { position:fixed; top:12px; right:12px; bottom:12px; width:320px; background:var(--panel); border:1px solid var(--line);
-           border-radius:12px; padding:14px; overflow:auto; backdrop-filter:blur(6px) }
-  #panel h1 { font-size:16px; margin:0 0 8px; display:flex; align-items:center; gap:8px }
-  #panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:14px 0 6px }
-  .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:99px; border:1px solid var(--line); font-size:12px }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--mut) }
-  .ok .dot { background:var(--acc) } .bad .dot { background:var(--red) }
-  .big { display:flex; gap:20px; font-size:28px; font-weight:650; font-variant-numeric:tabular-nums }
-  .big small { display:block; font-size:11px; color:var(--mut); font-weight:400 }
-  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 }
-  button, select, input { font:inherit; color:inherit; background:transparent; border:1px solid var(--line); border-radius:7px; padding:5px 10px }
-  button { cursor:pointer } button:hover { border-color:var(--acc) }
-  button.on { background:var(--acc); border-color:var(--acc); color:#fff }
-  button.danger { border-color:var(--red); color:var(--red) }
-  input[type=number] { width:64px }
-  .st { font-weight:700 } .st.CHAY { color:var(--acc) } .st.LOI { color:var(--red) }
-  .mut { color:var(--mut); font-size:12px }
-  #events { list-style:none; margin:0; padding:0; font:12px/1.45 ui-monospace,Menlo,monospace }
-  #events li { padding:2px 0; border-bottom:1px dashed var(--line) }
-  .lvE { color:var(--red) } .lvW { color:var(--amb) }
-  a { color:var(--acc) }
-  /* Nhãn nổi gắn vào vật thể 3D */
-  .tag { pointer-events:auto; cursor:pointer; padding:3px 8px; border-radius:7px; font-size:12px; white-space:nowrap;
-         background:rgba(15,19,17,.82); color:#e4e9e5; border:1px solid rgba(255,255,255,.18); transform:translateY(-14px) }
-  .tag b { font-variant-numeric:tabular-nums }
-  .tag.CHAY { border-color:var(--acc) } .tag.LOI { border-color:var(--red); color:#ffb4a6 }
-  .tag.hover { border-color:#fff }
-  #views { position:fixed; left:12px; bottom:12px; display:flex; gap:6px }
-  #views button { background:var(--panel) }
-  #tip { position:fixed; left:12px; top:12px; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:8px 11px; max-width:340px }
-  #offline { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--red); color:#fff; padding:5px 14px; border-radius:99px; display:none }
-  #loading { position:fixed; inset:0; display:grid; place-items:center; color:var(--mut); pointer-events:none }
-  @media (max-width:720px) {
-    #panel { top:auto; left:8px; right:8px; bottom:8px; width:auto; max-height:46vh }
-    #views { bottom:auto; top:8px; left:8px } #tip { display:none }
-  }
-</style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhà kính · Bản sao số</title>
+<link rel="stylesheet" href="/dashboard.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+<script type="module" src="/dashboard.js"></script>
 </head>
 <body>
-<div id="view"></div>
-<div id="loading">Đang tải mô hình 3D…</div>
-<div id="offline">ESP32 offline: đang hiển thị trạng thái cuối</div>
-<div id="tip" class="mut">Kéo để xoay · cuộn để phóng to · <b>bấm vào nhãn hoặc bộ phận</b> để điều khiển · Alt + bấm lên mô hình để xem toạ độ</div>
-<div id="views"><button data-cam="iso">3D</button><button data-cam="front">Trước</button><button data-cam="top">Trên</button><button data-cam="right">Phải</button></div>
-
-<aside id="panel">
-  <h1>Nhà kính · bản sao số <a href="/" class="mut" style="margin-left:auto">dashboard</a></h1>
-  <div class="row"><span id="broker" class="pill"><span class="dot"></span><span>broker</span></span>
-    <span id="online" class="pill"><span class="dot"></span><span>--</span></span><select id="dev"></select></div>
-  <div class="big"><div><small>Nhiệt độ</small><span id="t">--</span>°</div><div><small>Độ ẩm</small><span id="h">--</span>%</div></div>
-  <p class="mut" id="meta"></p>
-
-  <h2>Máy bơm</h2>
-  <div class="row"><span id="pst" class="st">--</span><span class="mut" id="pinfo"></span></div>
-  <div class="mut" id="pmsg"></div>
-  <div class="row"><button id="pStart" class="on">Chạy</button><button id="pStop" class="danger">Dừng</button>
-    <span class="mut">duty</span><input id="duty" type="number" min="1" max="100"><button id="dutySet">Đặt</button></div>
-
-  <h2>Đèn</h2>
-  <div class="row"><button data-k="ledR">LED đỏ</button><button data-k="ledG">LED xanh</button></div>
-  <div class="row"><span class="mut">Dải LED</span><button data-arr="0">Tắt</button><button data-arr="1">Bật</button><button data-arr="2">Nháy</button></div>
-  <div class="row"><button data-k="auto">Tự động</button><span class="mut">ngưỡng</span><input id="th" type="number" step="0.5"><button id="thSet">Đặt</button></div>
-
-  <h2>Sự kiện</h2>
-  <ul id="events"></ul>
-  <p class="mut" id="pick"></p>
-</aside>
-
-<script type="importmap">
-{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
-</script>
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-
-// ===== Vị trí các bộ phận trên mô hình Meshy (đơn vị của model, x phải · y lên · z ra phía trước) =====
-// Đo bằng Alt + bấm lên mô hình rồi sửa số ở đây nếu điểm tương tác lệch khỏi bộ phận thật
-const SPOT = {
-  sensor: [-0.70, 0.62, -0.30],                    // cụm cảm biến góc trên bên trái
-  pump:   [0.43, -0.44, 0.40],                     // máy bơm nhỏ cạnh bình nước
-  tank:   [0.66, 0.30, 0.13],                      // bình nước
-  nozzle: [-0.60, -0.10, 0.00],                    // đầu ống tưới, nước nhỏ giọt ở đây
-  ledR:   [-0.42, -0.33, 0.60],
-  ledG:   [-0.34, -0.33, 0.60],
-  board:  [-0.58, -0.30, 0.30],                    // bo mạch điều khiển
-  strip:  [[-0.22, 0.45, -0.50], [0.62, 0.45, -0.50], [-0.22, 0.45, -0.14], [0.62, 0.45, -0.14]],  // 2 đoạn dải LED trên nóc
-};
-const CAMS = { iso: [1.7, 1.1, 2.1], front: [0, 0.05, 3.3], top: [0, 3.4, 0.01], right: [3.3, 0.1, 0] };
-
-// ===== Cảnh 3D =====
-const host = document.getElementById('view');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-host.appendChild(renderer.domElement);
-const labels = new CSS2DRenderer();
-labels.domElement.style.cssText = 'position:absolute;inset:0;pointer-events:none';
-host.appendChild(labels.domElement);
-
-const scene = new THREE.Scene();
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 50);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.minDistance = 0.6; controls.maxDistance = 12;
-const floor = new THREE.Mesh(new THREE.CircleGeometry(3, 64), new THREE.MeshStandardMaterial({ color: 0x1a201c, roughness: 1 }));
-floor.rotation.x = -Math.PI / 2; floor.position.y = -0.67; scene.add(floor);
-
-const q = new URLSearchParams(location.search);
-resize();
-function setCam(name) {
-  const k = host.clientWidth < host.clientHeight ? 3.2 : 1;   // màn dọc (điện thoại) lùi xa để thấy hết chiều ngang
-  camera.position.set(...CAMS[name].map((v) => v * k)); controls.target.set(0, -0.05, 0); controls.update();
-}
-setCam(q.get('cam') || 'iso');
-
-function resize() {
-  const w = host.clientWidth, h = host.clientHeight;
-  renderer.setSize(w, h); labels.setSize(w, h);
-  camera.aspect = w / h;
-  // Màn hình rộng: dời tâm khung nhìn sang trái để bảng điều khiển không che mô hình
-  // Điện thoại: bảng nằm dưới, dời mô hình lên nửa trên
-  const pw = w > 720 ? 344 : 0, ph = pw ? 0 : Math.round(h * 0.4);
-  camera.setViewOffset(w + pw, h + ph, pw, ph, w, h);
-  camera.updateProjectionMatrix();
-}
-addEventListener('resize', resize);
-
-const V = (a) => new THREE.Vector3(...a);
-const glow = (color) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, toneMapped: false });
-const clickable = [];      // vật thể bấm được: mesh.userData.act = hàm gửi lệnh
-
-function label(pos, html, act) {
-  const el = document.createElement('div');
-  el.className = 'tag'; el.innerHTML = html;
-  if (act) el.onclick = act;
-  const o = new CSS2DObject(el); o.position.copy(V(pos)); scene.add(o);
-  return el;
-}
-
-// LED đỏ / xanh: quả cầu phát sáng + đèn điểm chiếu ra xung quanh
-function makeLed(pos, color, key) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.022, 20, 14), glow(0x333333));
-  m.position.copy(V(pos)); m.userData.act = () => toggle(key); scene.add(m); clickable.push(m);
-  const light = new THREE.PointLight(color, 0, 0.8); light.position.copy(m.position); scene.add(light);
-  return { m, light, color: new THREE.Color(color) };
-}
-const LED = { ledR: makeLed(SPOT.ledR, 0xff3b2f, 'ledR'), ledG: makeLed(SPOT.ledG, 0x31e06a, 'ledG') };
-
-// Dải LED: 2 ống sáng dọc nóc
-const stripMat = glow(0x2a2a22);
-const stripLights = [];
-for (let i = 0; i < SPOT.strip.length; i += 2) {
-  const a = V(SPOT.strip[i]), b = V(SPOT.strip[i + 1]);
-  const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(a, b), 8, 0.012, 8), stripMat);
-  tube.userData.act = () => send({ ledArray: ((tele()?.ledArray ?? 0) + 1) % 3 }); scene.add(tube); clickable.push(tube);
-  for (const t of [0.2, 0.8]) {
-    const l = new THREE.PointLight(0xfff1c8, 0, 1.4); l.position.copy(a.clone().lerp(b, t)); scene.add(l); stripLights.push(l);
-  }
-}
-
-// Máy bơm: vòng sáng đổi màu theo FSM (xám DỪNG · xanh CHẠY · đỏ LỖI), nước nhỏ giọt ở đầu tưới khi chạy
-const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.009, 10, 48), glow(0x666666));
-ring.position.copy(V(SPOT.pump)); ring.rotation.x = Math.PI / 2; scene.add(ring);
-const pumpHit = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
-pumpHit.position.copy(ring.position); pumpHit.userData.act = () => togglePump(); scene.add(pumpHit); clickable.push(pumpHit);
-
-const DROPS = 60;
-const dropGeo = new THREE.BufferGeometry();
-dropGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DROPS * 3), 3));
-const drops = new THREE.Points(dropGeo, new THREE.PointsMaterial({ color: 0x6fb8ff, size: 0.018, transparent: true, opacity: 0.85 }));
-drops.visible = false; scene.add(drops);
-const dropSeed = Array.from({ length: DROPS }, () => Math.random());
-
-// Nhãn nổi
-const tagSensor = label(SPOT.sensor, 'Cảm biến <b>--</b>');
-const tagPump = label(SPOT.pump, 'Máy bơm <b>--</b>', () => togglePump());
-const tagStrip = label(SPOT.strip[1].map((v, i) => (i === 1 ? v + 0.06 : v)), 'Dải LED <b>--</b>',
-  () => send({ ledArray: ((tele()?.ledArray ?? 0) + 1) % 3 }));
-const tagBoard = label(SPOT.board, 'Bo mạch · LED <b>--</b>');
-label(SPOT.tank, 'Bình nước');
-
-// Mô hình Meshy
-new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load('/models/nhakinh.glb', (g) => {
-  g.scene.traverse((o) => { if (o.isMesh) { o.userData.model = true; clickable.push(o); } });
-  scene.add(g.scene);
-  document.getElementById('loading').remove();
-}, undefined, (e) => { document.getElementById('loading').textContent = 'Không tải được mô hình: ' + e.message; });
-
-// ===== Chuột: rê để sáng nhãn, bấm để gửi lệnh, Alt + bấm để đo toạ độ =====
-const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
-function hit(ev) {
-  const r = renderer.domElement.getBoundingClientRect();
-  ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ptr, camera);
-  return ray.intersectObjects(clickable, false);
-}
-let downAt = null;
-renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;   // đang kéo xoay
-  const hits = hit(e);
-  if (e.altKey && hits[0]) {
-    const p = hits[0].point, s = `[${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`;
-    document.getElementById('pick').textContent = 'Toạ độ vừa bấm: ' + s;
-    navigator.clipboard?.writeText(s).catch(() => {});
-    return;
-  }
-  const act = hits.find((h) => h.object.userData.act);
-  if (act && (!hits[0].object.userData.model || act.distance - hits[0].distance < 0.15)) act.object.userData.act();
-});
-renderer.domElement.addEventListener('pointermove', (e) => {
-  const h = hit(e).find((x) => x.object.userData.act);
-  renderer.domElement.style.cursor = h ? 'pointer' : '';
-});
-
-// ===== Dữ liệu từ app (SSE) và lệnh MQTT =====
-let S = { devices: {} }, cur = q.get('dev');   // 3d.html?dev=esp32-01 mở thẳng thiết bị đó
-try { cur ||= localStorage.getItem('dev'); } catch {}
-const $ = (s) => document.querySelector(s);
-const tele = () => S.devices[cur]?.tele;
-
-async function send(cmd) {
-  if (!cur) return;
-  const r = await fetch('/api/cmd/' + encodeURIComponent(cur), { method: 'POST', body: JSON.stringify(cmd) });
-  const j = await r.json();
-  if (!j.ok) $('#pick').textContent = 'Lỗi gửi lệnh: ' + j.err;
-}
-function toggle(k) {
-  const x = tele();
-  if (k !== 'auto' && x?.auto) { $('#pick').textContent = 'Đang tự động: ESP32 tự điều khiển LED đỏ/xanh'; return; }
-  send({ [k]: x?.[k] ? 0 : 1 });
-}
-const togglePump = () => send({ cmd: tele()?.pump?.st === 'CHAY' ? 'stop' : 'start' });
-
-function pill(el, ok, text) {
-  el.classList.toggle('ok', ok === true); el.classList.toggle('bad', ok === false);
-  el.lastElementChild.textContent = text;
-}
-function renderDevList() {
-  const names = Object.keys(S.devices).sort();
-  if (!cur || !names.includes(cur)) cur = names.find((n) => S.devices[n].status === 'online') || names[0] || null;
-  $('#dev').innerHTML = names.map((n) => `<option ${n === cur ? 'selected' : ''}>${n}</option>`).join('');
-}
-
-const ARR = ['tắt', 'bật', 'nháy'];
-function render() {
-  pill($('#broker'), S.broker, S.broker ? 'broker' : 'mất broker');
-  const d = S.devices[cur];
-  if (!d) return;
-  pill($('#online'), d.status === 'online' ? true : d.status === 'offline' ? false : null, d.status);
-  $('#offline').style.display = d.status === 'offline' ? 'block' : 'none';
-  const x = d.tele;
-  if (!x) return;
-  const p = x.pump || {};
-  $('#t').textContent = x.t ?? '--'; $('#h').textContent = x.h ?? '--';
-  $('#meta').textContent = `cập nhật ${new Date(d.seen).toLocaleTimeString('vi-VN')} · mã ${x.code} · RSSI ${x.rssi} dBm`;
-  $('#pst').textContent = p.st; $('#pst').className = 'st ' + p.st;
-  $('#pinfo').textContent = p.st === 'CHAY' ? `${p.el}/${p.lim}s · ${p.out}%` : p.cool ? `nghỉ còn ${p.cool}s` : '';
-  $('#pmsg').textContent = p.msg || '';
-  for (const b of document.querySelectorAll('[data-k]')) b.classList.toggle('on', !!x[b.dataset.k]);
-  for (const b of document.querySelectorAll('[data-arr]')) b.classList.toggle('on', +b.dataset.arr === x.ledArray);
-  for (const [id, v] of [['th', x.th], ['duty', p.duty]]) if (document.activeElement !== $('#' + id)) $('#' + id).value = v;
-  $('#events').innerHTML = d.events.slice(-8).reverse().map((e) =>
-    `<li class="lv${e.lv}">${new Date(e.ts).toLocaleTimeString('vi-VN')} ${e.msg.replace(/</g, '&lt;')}</li>`).join('');
-
-  // Nhãn 3D
-  tagSensor.innerHTML = x.code ? `Cảm biến <b>lỗi E${x.code}</b>` : `Cảm biến <b>${x.t ?? '--'}°C · ${x.h ?? '--'}%</b>`;
-  tagSensor.className = 'tag' + (x.code ? ' LOI' : '');
-  tagPump.innerHTML = `Máy bơm <b>${p.st}${p.st === 'CHAY' ? ` ${p.el}/${p.lim}s` : p.cool ? ` · nghỉ ${p.cool}s` : ''}</b>`;
-  tagPump.className = 'tag ' + p.st;
-  tagStrip.innerHTML = `Dải LED <b>${ARR[x.ledArray]}</b>`;
-  tagBoard.innerHTML = `Bo mạch · LED <b style="color:${x.ledR ? '#ff7b6e' : '#777'}">đỏ</b> <b style="color:${x.ledG ? '#6fe39a' : '#777'}">xanh</b>${x.auto ? ' · tự động' : ''}`;
-}
-
-const es = new EventSource('/stream');
-es.onmessage = (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.kind === 'snapshot') { S = m; renderDevList(); return render(); }
-  if (m.kind === 'broker') { S.broker = m.ok; return render(); }
-  const d = S.devices[m.dev] ||= { status: 'unknown', tele: null, seen: 0, hist: [], events: [] };
-  d.seen = m.ts;
-  if (m.kind === 'status') d.status = m.data;
-  if (m.kind === 'telemetry') d.tele = m.data;
-  if (m.kind === 'event') { m.data.ts = m.ts; d.events.push(m.data); }
-  if (![...$('#dev').options].some((o) => o.text === m.dev)) renderDevList();
-  if (m.dev === cur) render();
-};
-es.onerror = () => pill($('#broker'), false, 'mất app');
-
-$('#dev').onchange = (e) => { cur = e.target.value; try { localStorage.setItem('dev', cur); } catch {} render(); };
-for (const b of document.querySelectorAll('[data-k]')) b.onclick = () => toggle(b.dataset.k);
-for (const b of document.querySelectorAll('[data-arr]')) b.onclick = () => send({ ledArray: +b.dataset.arr });
-for (const b of document.querySelectorAll('[data-cam]')) b.onclick = () => setCam(b.dataset.cam);
-$('#thSet').onclick = () => send({ th: +$('#th').value });
-$('#pStart').onclick = () => send({ cmd: 'start' });
-$('#pStop').onclick = () => send({ cmd: 'stop' });
-$('#dutySet').onclick = () => send({ duty: +$('#duty').value });
-
-// ===== Vòng vẽ: hiệu ứng theo trạng thái thật =====
-const PUMP_COL = { DUNG: 0x666666, CHAY: 0x3ad17a, LOI: 0xff4433 };
-const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => {
-  const t = clock.getElapsedTime(), x = tele(), p = x?.pump || {};
-  for (const k of ['ledR', 'ledG']) {
-    const on = !!x?.[k];
-    LED[k].m.material.color.set(on ? LED[k].color : 0x333333);
-    LED[k].light.intensity = on ? 1.2 : 0;
-  }
-  // Dải LED: chu kỳ nháy giống firmware (BLINK_MS = 500 ms)
-  const arrOn = x?.ledArray === 1 || (x?.ledArray === 2 && Math.floor(t * 2) % 2 === 0);
-  stripMat.color.set(arrOn ? 0xfff4d0 : 0x2a2a22);
-  for (const l of stripLights) l.intensity = arrOn ? 1.5 : 0;
-
-  const run = p.st === 'CHAY';
-  ring.material.color.set(PUMP_COL[p.st] ?? 0x666666);
-  const k = run ? 1 + 0.25 * Math.sin(t * 8) : p.st === 'LOI' ? 1 + 0.15 * Math.sin(t * 14) : 1;
-  ring.scale.set(k, k, k);
-  drops.visible = run;
-  if (run) {
-    const a = dropGeo.attributes.position, [nx, ny, nz] = SPOT.nozzle, speed = 0.4 + (p.out || 50) / 100;
-    for (let i = 0; i < DROPS; i++) {
-      const f = (t * speed + dropSeed[i]) % 1;
-      a.setXYZ(i, nx + (dropSeed[i] - 0.5) * 0.04, ny - f * (ny + 0.5), nz + (dropSeed[(i + 7) % DROPS] - 0.5) * 0.04);
-    }
-    a.needsUpdate = true;
-  }
-  controls.update();
-  renderer.render(scene, camera);
-  labels.render(scene, camera);
-});
-</script>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Nhà kính IoT, trang tổng quan"><span class="brand-mark" aria-hidden="true">♧</span><span><strong>Nhà kính IoT</strong><small>GIÁM SÁT &amp; ĐIỀU KHIỂN</small></span></a>
+  <nav aria-label="Điều hướng"><a id="navOverview" href="/">Tổng quan</a><a id="navTwin" href="/3d.html">Bản sao số</a><span id="who" class="pill">Đang kiểm tra đăng nhập…</span><button id="logout" class="ghost">Đăng xuất</button></nav>
+</header>
+<main class="shell">
+  <div class="page-heading"><div><span class="eyebrow">Không gian vận hành</span><h1>Điều hành nhà kính</h1><p>Cảm biến, thiết bị và mô hình trong một góc nhìn.</p><p id="perm" class="hint">Đang kiểm tra quyền…</p></div><div class="device-select"><label for="dev">Thiết bị đang xem</label><select id="dev"><option value="">Đang kết nối…</option></select></div></div>
+  <section id="connection" class="connection muted" aria-label="Tình trạng kết nối"><span class="status-orb" aria-hidden="true"></span><div><strong id="connectionTitle">Đang kết nối ứng dụng</strong><p id="connectionDetail">Chờ dữ liệu từ MQTT…</p></div><div class="status-group"><span id="broker" class="pill">MQTT: đang chờ</span><span id="online" class="pill">ESP32: đang chờ</span></div></section>
+  <div class="workspace">
+    <div class="dashboard" id="panel">
+      <section class="metrics" aria-label="Thông số chính">
+        <article class="card metric"><div class="metric-label">Nhiệt độ <span class="metric-icon" aria-hidden="true">°</span></div><div class="metric-value"><span id="t">--</span> <small>°C</small></div><p id="sensorState">Chờ cảm biến</p></article>
+        <article class="card metric humidity"><div class="metric-label">Độ ẩm <span class="metric-icon" aria-hidden="true">≈</span></div><div class="metric-value"><span id="h">--</span> <small>%</small></div><p id="freshness">Chưa có dữ liệu</p></article>
+        <article class="card metric pump-metric"><div class="metric-label">Máy bơm <span class="metric-icon" aria-hidden="true">↻</span></div><div id="pumpMetric" class="metric-value">--</div><p id="pumpMetricInfo">Chờ trạng thái</p></article>
+      </section>
+      <section class="card" aria-labelledby="chartTitle"><div class="section-head"><div><h2 id="chartTitle">Diễn biến môi trường</h2><p>30 phút gần nhất</p></div><div class="legend"><span>Nhiệt độ · °C</span><span>Độ ẩm · %</span></div></div><div class="chart-wrap"><canvas id="chart" role="img" aria-label="Biểu đồ nhiệt độ và độ ẩm trong 30 phút gần nhất"></canvas></div><div class="chart-footer"><span id="meta">Chưa nhận được telemetry</span><span>Tải CSV hôm nay<a id="csvT" aria-disabled="true">Cảm biến ↓</a><a id="csvE" aria-disabled="true">Sự kiện ↓</a></span></div></section>
+      <div class="controls-grid">
+        <section class="card" aria-labelledby="pumpTitle"><div class="section-head"><div><h2 id="pumpTitle">Điều khiển máy bơm</h2><p>Thao tác với thiết bị thật</p></div></div><div class="pump-summary"><span id="pst" class="st">--</span><span id="pinfo" class="mut"></span></div><p id="pmsg" class="mut">Chờ dữ liệu từ thiết bị.</p><div class="actions"><button id="pStart" class="primary" data-control="start" disabled>Chạy bơm</button><button id="pStop" class="danger" data-control="stopPump" disabled>Dừng bơm</button></div><p id="pumpHint" class="hint">Điều khiển chỉ khả dụng khi dữ liệu mới và thiết bị trực tuyến.</p><details class="settings"><summary>Cấu hình công suất &amp; thời gian</summary><div class="field-grid"><label for="duty">Công suất (%)<input id="duty" type="number" min="1" max="100" step="1" data-control data-perm="configure" disabled></label><label for="lim">Chạy tối đa (s)<input id="lim" type="number" min="3" max="300" step="1" data-control data-perm="configure" disabled></label><label for="cd">Nghỉ (s)<input id="cd" type="number" min="0" max="600" step="1" data-control data-perm="configure" disabled></label></div><button id="cfgSet" class="full" style="margin-top:10px" data-control data-perm="configure" disabled>Lưu cấu hình bơm</button></details></section>
+        <section class="card" aria-labelledby="lightsTitle"><div class="section-head"><div><h2 id="lightsTitle">Đèn &amp; tự động hóa</h2><p id="autoHint">Điều khiển riêng từng đèn</p></div></div><div class="toggle-row"><span>LED đỏ</span><button data-k="ledR" data-control="ledR" aria-label="Bật tắt LED đỏ" aria-pressed="false" disabled>--</button></div><div class="toggle-row"><span>LED xanh</span><button data-k="ledG" data-control="ledG" aria-label="Bật tắt LED xanh" aria-pressed="false" disabled>--</button></div><div class="toggle-row"><span>Dải LED</span><div class="segmented" role="group" aria-label="Chế độ dải LED"><button data-arr="0" data-control disabled>Tắt</button><button data-arr="1" data-control disabled>Bật</button><button data-arr="2" data-control disabled>Nháy</button></div></div><div class="toggle-row"><span>Tự động tại ESP32 (LED đỏ/xanh)</span><button data-k="auto" data-control data-perm="configure" aria-label="Bật tắt tự động tại ESP32" aria-pressed="false" disabled>--</button></div><div class="threshold"><label for="th">Ngưỡng (°C)</label><input id="th" type="number" min="0" max="50" step="0.5" data-control data-perm="configure" disabled><button id="thSet" data-control data-perm="configure" disabled>Áp dụng</button></div></section>
+      </div>
+      <div class="controls-grid">
+        <section class="card" aria-labelledby="ruleTitle"><div class="section-head"><div><h2 id="ruleTitle">Luật tự động &amp; khóa an toàn</h2><p id="ruleInfo">Luật thông gió chạy trên dịch vụ</p></div><span id="modeBadge" class="badge">--</span></div><div class="toggle-row"><span>Chế độ luật</span><div class="segmented" role="group" aria-label="Chế độ luật tự động"><button id="modeManual" data-control="mode" disabled>Thủ công</button><button id="modeAuto" data-control="mode" disabled>Tự động</button></div></div><p id="fanInfo" class="hint">LED xanh giả lập quạt thông gió.</p><div class="toggle-row"><span>Khóa an toàn tại ESP32</span><div class="actions"><button id="lockOn" class="danger" data-control="lockOn" disabled>Khóa</button><button id="lockOff" data-control="lockOff" data-perm="configure" disabled>Mở khóa</button></div></div><p id="lockInfo" class="hint">Khóa: dừng bơm, tắt tải do luật bật, ESP32 từ chối lệnh tự động. Chỉ quản trị được mở khóa.</p><details class="settings"><summary>Nhật ký quyết định của luật</summary><ul id="ruleLog" class="event-list"><li class="empty">Chưa có.</li></ul></details></section>
+        <section class="card" aria-labelledby="cmdTitle"><div class="section-head"><div><h2 id="cmdTitle">Lệnh gần đây</h2><p>Chỉ "đã xác nhận" khi ESP32 gửi ack đúng mã lệnh</p></div></div><ul id="cmds" class="event-list cmd-list"><li class="empty">Chưa có lệnh.</li></ul></section>
+      </div>
+      <p id="sent" class="command-feedback" role="status" aria-live="polite"></p>
+      <section class="card" aria-labelledby="eventsTitle"><div class="section-head"><div><h2 id="eventsTitle">Nhật ký hoạt động</h2><p>Sự kiện của thiết bị đang chọn</p></div><span id="eventCount" class="badge">0 sự kiện</span></div><ul id="events" class="event-list"><li class="empty">Chưa có sự kiện.</li></ul></section>
+    </div>
+    <aside class="twin-column" aria-labelledby="twinTitle"><section class="card twin-card"><div class="section-head"><div><h2 id="twinTitle">Bản sao số 3D</h2><p>Quan sát nhà kính và từng bộ phận</p></div><span class="badge">CHỈ QUAN SÁT</span></div><div class="viewport"><div id="view" aria-label="Mô hình 3D nhà kính"></div><div id="loading">Đang tải mô hình 3D…</div><div id="viewState" class="view-state">Chờ dữ liệu từ thiết bị</div></div><div id="views" role="group" aria-label="Góc nhìn mô hình"><button data-cam="iso">Phối cảnh</button><button data-cam="front">Trước</button><button data-cam="top">Trên</button><button data-cam="right">Phải</button></div><p class="twin-help">Kéo để xoay · cuộn để phóng to.<br>Bấm bộ phận để xem thông tin, không gửi lệnh.</p><div class="inspection" aria-live="polite"><strong id="inspectTitle">Khám phá mô hình</strong><p id="inspectText">Chọn nhãn hoặc bộ phận. Các nút điều khiển thiết bị nằm trong dashboard.</p><p id="pick"></p></div><div class="twin-details"><div><div class="section-head"><h2>Bình nước</h2><span class="badge">MÔ PHỎNG</span></div><div class="row"><div class="bar"><i id="wBar"></i></div><b id="wPct">--</b></div><p id="wMsg" class="hint">Chưa có cảm biến mực nước. Không dùng để quyết định tưới.</p></div><details class="settings"><summary>Âm thanh thiết bị · Buzzer</summary><p class="hint">Các nút này phát âm thanh trên thiết bị thật.</p><div id="songs"></div></details></div></section></aside>
+  </div>
+  <details class="card technical"><summary>Công cụ kỹ thuật · MQTT &amp; JSON</summary><div class="advanced-grid"><section><h3>Gửi lệnh JSON</h3><p class="hint">Dành cho kiểm thử, chỉ tài khoản quản trị. Lệnh được gửi tới thiết bị đang chọn và chờ xác nhận như mọi lệnh khác.</p><label class="visually-hidden" for="cmd">Nội dung lệnh JSON</label><textarea id="cmd" rows="3" data-control data-perm="configure" disabled>{"ledG":1}</textarea><button id="send" data-control data-perm="configure" disabled>Gửi lệnh JSON</button></section><section><h3>Tin MQTT của thiết bị đang chọn</h3><ul id="raw"><li class="empty">Chưa có bản tin trong phiên xem này.</li></ul></section></div></details>
+  <footer class="footer"><span>Nhà kính IoT · MQTT / ESP32</span><span>Chỉ báo thời gian dùng lúc ứng dụng nhận telemetry.</span></footer>
+</main>
 </body>
 </html>

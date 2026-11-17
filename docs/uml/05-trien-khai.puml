@@ -1,0 +1,36 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 15
+skinparam ArrowColor #374151
+skinparam noteBackgroundColor #F8FAFC
+skinparam noteBorderColor #94A3B8
+title DD | Triển khai – PC giảng viên/nhóm, esp32-01, trình duyệt
+node "PC macOS (IP DHCP, hiện 172.16.51.164)" as PC {
+  component "Mosquitto 2.1\n:8883 TLS (passwd + acl)\n:1883 chỉ vju/iot/# (lab nhóm)" as B
+  component "app Node 20 (server.js)\nHTTP 127.0.0.1:3000\nHTTPS 0.0.0.0:3443" as App
+  database "app/data/mqtt.sqlite\nmqtt_messages · commands · audit\nrule_log · settings" as DB
+  file "tls/ca.crt (công khai)\ntls/*.key (bí mật, gitignored)" as TLS
+  component "sim-01 (tools/sim_esp32.js)\nthiết bị mô phỏng" as Sim
+}
+node "ESP32 DevKit esp32-01\n(nhà kính Farm House)" as N {
+  component "firmware/ (PlatformIO)\nPubSubClient + WiFiClientSecure\nFSM bơm Bài 3, bộ đệm 30" as FW
+}
+node "Uno R3" as Uno {
+  component "DHT11 D8 -> I2C slave 0x08" as DHT
+}
+node "ESP32 riêng (tùy chọn)" as N2 {
+  component "firmware_sleep/ sleep-01\nthức-đo-gửi-ngủ 20 s" as SL
+}
+node "Trình duyệt / iPhone" as Br
+FW -down-> DHT : I2C SDA33/SCL32
+FW --> B : MQTTS 8883\nuser esp32-01, CA nhóm
+SL --> B : MQTTS 8883 user sleep-01
+Sim --> B : MQTTS user sim-01
+App --> B : MQTTS user app
+App --> DB
+B ..> TLS
+Br --> App : HTTPS 3443 (cài ca.crt)\nđăng nhập theo vai
+note bottom of PC : Đổi IP: chạy mqtt_broker/tls/make-certs.sh,\nsửa MQTT_HOST trong secrets.h, nạp lại ESP32.\nNên xin IT cấp IP cố định cho PC.
+@enduml
